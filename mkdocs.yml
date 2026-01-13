@@ -57,6 +57,12 @@ nav:
   - Развёртывание: 10_diagrams/deployment.md
   - Sequence: 10_diagrams/sequences.md
 
-- Архитектурные решения:
-  - ADR: adr/index.md
-  - ADL: adl/index.md
+  - Архитектурные решения:
+    - ADR: adr/index.md
+    - ADR-001: adr/ADR-001.md
+    - ADR-002: adr/ADR-002.md
+    - ADR-003: adr/ADR-003.md
+    - ADR-004: adr/ADR-004.md
+    - ADR-005: adr/ADR-005.md
+    - ADR-006: adr/ADR-006.md
+    - ADL: adl/index.md
