@@ -1,28 +1,73 @@
+# Project information
 site_name: Software Architect Docs
 site_url: https://i-chetvergov.github.io/software_architect/
+# Repository
 repo_name: i-chetvergov/software_architect
 repo_url: https://github.com/i-chetvergov/software_architect
 
 theme:
   name: material
   language: ru
+  palette:
+  - media: "(prefers-color-scheme: light)"
+    scheme: default
+    primary: indigo
+    accent: indigo
+    toggle:
+      icon: material/brightness-7
+      name: Переключить на тёмную тему
+  - media: "(prefers-color-scheme: dark)"
+    scheme: slate
+    primary: indigo
+    accent: indigo
+    toggle:
+      icon: material/brightness-4
+      name: Переключить на светлую тему
+  font:
+    text: Roboto
+    code: Roboto Mono
+  icon:
+    repo: fontawesome/brands/github
   features:
   - navigation.instant
   - navigation.tracking
   - navigation.expand
+  - navigation.path
   - navigation.top
+  - navigation.footer
+  - navigation.indexes
   - toc.integrate
-  - search.highlight
+  - toc.follow
   - search
-  font:
-    text: Roboto
-    code: Roboto Mono
+  - search.highlight
+  - search.suggest
+  - content.code.copy
+  - content.code.annotate
+  - content.tabs.link
 
 markdown_extensions:
+- abbr
 - admonition
-- pymdownx.superfences
+- attr_list
+- def_list
+- footnotes
+- md_in_html
+- tables
+- toc:
+    toc_depth: 3
+    permalink: true
 - pymdownx.details
+- pymdownx.superfences
 - pymdownx.highlight
+- pymdownx.inlinehilite
+- pymdownx.keys
+- pymdownx.tabbed:
+    alternate_style: true
+- pymdownx.tasklist:
+    custom_checkbox: true
+- pymdownx.emoji:
+    emoji_index: !!python/name:material.extensions.emoji.twemoji ""
+    emoji_generator: !!python/name:material.extensions.emoji.to_svg ""
 - pymdownx.snippets
 
 plugins:
@@ -30,6 +75,12 @@ plugins:
 - glightbox
 - swagger-ui-tag
 - enumerate-headings
+
+extra:
+  social:
+  - icon: fontawesome/brands/github
+    link: https://github.com/i-chetvergov/software_architect
+    name: GitHub репозиторий проекта
 
 nav:
 - Главная: index.md
@@ -56,11 +107,14 @@ nav:
   - Развёртывание: 10_diagrams/deployment.md
   - Sequence: 10_diagrams/sequences.md
 
-  - Архитектурные решения:
-    - ADL: adl/index.md
-    - ADR-001: adr/ADR-001.md
-    - ADR-002: adr/ADR-002.md
-    - ADR-003: adr/ADR-003.md
-    - ADR-004: adr/ADR-004.md
-    - ADR-005: adr/ADR-005.md
-    - ADR-006: adr/ADR-006.md
+- Архитектурные решения:
+  - ADL: adl/index.md
+  - ADR-001: adr/ADR-001.md
+  - ADR-002: adr/ADR-002.md
+  - ADR-003: adr/ADR-003.md
+  - ADR-004: adr/ADR-004.md
+  - ADR-005: adr/ADR-005.md
+  - ADR-006: adr/ADR-006.md
+
+extra_css:
+- stylesheets/extra.css
