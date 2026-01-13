@@ -1,0 +1,115 @@
+@startuml Deployment_UC_Platform
+' Deployment Diagram for UC Platform (Kubernetes-focused)
+
+skinparam rectangle {
+  BackgroundColor<<Node>> LightBlue
+  BorderColor<<Node>> DarkBlue
+}
+
+node "Corporate / Cloud Network" <<Node>> as Net {
+
+  node "Load Balancer / Ingress" <<Node>> as Ingress {
+    component "Ingress Controller\n(L7)" as IngressCtrl
+  }
+
+  node "Kubernetes Cluster" <<Node>> as K8s {
+
+    node "Namespace: uc-gateway" <<Node>> as NSGateway {
+      component "API Gateway\n(Deployment + Service)" as APIGW
+      component "WebRTC Gateway\n(Deployment + Service)" as WebRTCGW
+    }
+
+    node "Namespace: uc-core" <<Node>> as NSCore {
+      component "IAM / Identity Service" as IAM
+      component "Call Control Service" as CallControl
+      component "SIP Gateway / SBC\n(контейнеризуемая часть)" as SIPGW
+      component "Presence Service" as Presence
+      component "Messaging / Chat Service" as Chat
+      component "Provisioning Service" as Provisioning
+      component "Billing / CDR Service" as Billing
+      component "Notification Service" as Notify
+    }
+
+    node "Namespace: uc-media" <<Node>> as NSMedia {
+      component "Media / Recording Service\n(медиасерверы)" as MediaRec
+    }
+
+    node "Namespace: uc-observability" <<Node>> as NSObs {
+      component "Metrics Backend\n(Prometheus/TSDB)" as Metrics
+      component "Logs Stack\n(Loki/ES)" as Logs
+      component "Tracing Backend\n(Tempo/Jaeger)" as Traces
+      component "Dashboards\n(Grafana/Kibana)" as Dashboards
+    }
+  }
+
+  node "Data Plane / DB & Storage" <<Node>> as DataPlane {
+    database "OLTP DB\n(Users, Config, Provisioning)" as OLTPDB
+    database "CDR DB\n(Reporting)" as CDRDB
+    collections "Object Storage\n(Recordings)" as ObjStore
+    queue "Message Broker\n(Events, async)" as Broker
+  }
+
+  node "External Systems" <<Node>> as Ext {
+    node "Identity Provider / IdP" as IdP
+    node "CRM / ERP / Service Desk" as CRM
+    node "Email/SMS Gateway" as ESMSGW
+    node "PSTN / Operator SBC" as PSTN
+    node "Monitoring / SIEM" as SIEM
+  }
+}
+
+UCClient -[#blue]-> IngressCtrl : HTTPS (REST, WebSocket)\nКлиентский трафик
+IngressCtrl -[#blue]-> APIGW
+IngressCtrl -[#blue]-> WebRTCGW
+
+APIGW -[#blue]-> IAM
+APIGW -[#blue]-> CallControl
+APIGW -[#blue]-> Chat
+APIGW -[#blue]-> Notify
+APIGW -[#blue]-> Provisioning
+
+CallControl -[#blue]-> SIPGW : SIP
+CallControl -[#blue]-> MediaRec : Control API
+WebRTCGW -[#blue]-> MediaRec : WebRTC (DTLS/SRTP)
+
+IAM -[#green]-> OLTPDB
+Provisioning -[#green]-> OLTPDB
+Chat -[#green]-> OLTPDB
+Presence -[#green]-> OLTPDB
+
+CallControl -[#green]-> CDRDB : CDR записи
+Billing -[#green]-> CDRDB
+MediaRec -[#green]-> ObjStore : Файлы записей
+
+CallControl -[#orange]-> Broker : Events: CallStarted, CallEnded
+Chat -[#orange]-> Broker : Events: MessageSent
+Provisioning -[#orange]-> Broker : Events: UserCreated
+Notify -[#orange]-> Broker : Events: NotificationRequested
+
+APIGW -[#purple]-> Metrics
+APIGW -[#purple]-> Logs
+APIGW -[#purple]-> Traces
+CallControl -[#purple]-> Metrics
+CallControl -[#purple]-> Logs
+CallControl -[#purple]-> Traces
+MediaRec -[#purple]-> Metrics
+MediaRec -[#purple]-> Logs
+Billing -[#purple]-> Metrics
+Billing -[#purple]-> Logs
+
+Dashboards -[#purple]-> Metrics
+Dashboards -[#purple]-> Logs
+Dashboards -[#purple]-> Traces
+SIEM -[#purple]-> Logs : Сбор логов безопасности
+
+APIGW -[#blue]-> IdP : OIDC/SAML
+IAM -[#blue]-> IdP : Federation
+Billing -[#blue]-> CRM : Reports / Export
+Notify -[#blue]-> ESMSGW : Email/SMS
+SIPGW -[#blue]-> PSTN : SIP-транки
+
+note bottom of K8s
+  Каждый микросервис развёрнут как Deployment\nс auto-scaling (HPA) и несколькими репликами.\nСетевые политики и mTLS обеспечивают\nвнутреннюю безопасность взаимодействий.
+end note
+
+@enduml

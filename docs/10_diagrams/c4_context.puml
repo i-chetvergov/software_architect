@@ -1,0 +1,47 @@
+@startuml C4_Context_UC_Platform
+' C4 Context Diagram for Unified Communications Platform
+
+skinparam rectangle {
+  BackgroundColor<<System>> LightBlue
+  BorderColor<<System>> DarkBlue
+}
+skinparam rectangle {
+  BackgroundColor<<ExternalSystem>> HoneyDew
+  BorderColor<<ExternalSystem>> DarkGreen
+}
+
+actor "Корпоративный пользователь" as CorpUser
+actor "Администратор UC" as Admin
+actor "Внешний абонент" as ExternalCaller
+
+rectangle "UC Platform" <<System>> as UC {
+  rectangle "UC Clients\n(Web, Mobile, Desktop)" as UCClients
+}
+
+rectangle "Identity Provider / IdP" <<ExternalSystem>> as IdP
+rectangle "CRM / ERP" <<ExternalSystem>> as CRM
+rectangle "PSTN / Операторская сеть" <<ExternalSystem>> as PSTN
+rectangle "Email/SMS Gateway" <<ExternalSystem>> as ESMSGW
+rectangle "Системы мониторинга и ИБ" <<ExternalSystem>> as Monitoring
+
+CorpUser --> UCClients : Использование голоса/видео/чата
+Admin --> UC : Администрирование и управление политиками
+ExternalCaller --> PSTN : Звонки в сторону компании
+
+UCClients --> UC : WebRTC / HTTPS (REST, WebSocket)\nРегистрация, сигналы вызовов, сообщения
+UC --> IdP : OIDC / SAML\nАутентификация и SSO
+UC --> CRM : REST / Webhook\nИнтеграция с карточкой клиента, логирование
+UC --> ESMSGW : SMTP / HTTPS\nEmail/SMS/Push уведомления
+UC --> Monitoring : Metrics / Logs / Traces\nНаблюдаемость и ИБ
+UC --> PSTN : SIP-транки через SBC\nИсходящие вызовы
+PSTN --> UC : SIP-транки через SBC\nВходящие вызовы
+
+note right of UC
+  Граница системы «UC Platform» включает
+  микросервисы сигнализации, медиа,
+  presence, сообщений, биллинга и т.д.
+  Внешние системы показаны как отдельные
+  контексты интеграции.
+end note
+
+@enduml

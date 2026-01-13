@@ -1,0 +1,85 @@
+@startuml C4_Containers_UC_Platform
+' C4 Container Diagram for Unified Communications Platform
+
+skinparam rectangle {
+  BackgroundColor<<Container>> LightBlue
+  BorderColor<<Container>> DarkBlue
+}
+skinparam rectangle {
+  BackgroundColor<<ExternalSystem>> HoneyDew
+  BorderColor<<ExternalSystem>> DarkGreen
+}
+
+rectangle "UC Platform" <<System>> as UC {
+
+  rectangle "API Gateway" <<Container>> as APIGW
+  rectangle "IAM / Identity Service" <<Container>> as IAM
+
+  rectangle "Call Control Service" <<Container>> as CallControl
+  rectangle "SIP Gateway / SBC" <<Container>> as SIPGW
+  rectangle "WebRTC Gateway" <<Container>> as WebRTCGW
+
+  rectangle "Presence Service" <<Container>> as Presence
+  rectangle "Messaging / Chat Service" <<Container>> as Chat
+  rectangle "Media / Recording Service" <<Container>> as MediaRec
+
+  rectangle "Provisioning Service" <<Container>> as Provisioning
+  rectangle "Billing / CDR Service" <<Container>> as Billing
+  rectangle "Notification Service" <<Container>> as Notify
+
+  rectangle "Observability Stack\n(Metrics/Logs/Traces)" <<Container>> as Observability
+}
+
+rectangle "UC Clients\n(Web, Mobile, Desktop)" <<ExternalSystem>> as UCClients
+rectangle "Identity Provider / IdP" <<ExternalSystem>> as IdP
+rectangle "CRM / ERP / Service Desk" <<ExternalSystem>> as CRM
+rectangle "PSTN / Операторская сеть" <<ExternalSystem>> as PSTN
+rectangle "Email/SMS Gateway" <<ExternalSystem>> as ESMSGW
+
+UCClients --> APIGW : HTTPS (REST, WebSocket)\nUI/API вызовы
+APIGW --> IAM : REST / gRPC\nАутентификация, авторизация
+IAM --> IdP : OIDC / SAML\nSSO и федерация
+
+APIGW --> CallControl : REST / gRPC\nИнициация/управление вызовами
+CallControl --> SIPGW : SIP (сигнализация)\nИсходящие/входящие вызовы
+CallControl --> WebRTCGW : WebRTC (DTLS/SRTP)\nСигнализация и медиа
+WebRTCGW --> MediaRec : RTP/SRTP\nМедиапотоки и запись
+SIPGW --> PSTN : SIP-транки\nИнтеграция с оператором
+
+APIGW --> Chat : REST / WebSocket\nСообщения и чаты
+APIGW --> Presence : REST / Events\nСтатусы пользователей
+Chat --> Presence : Events\nОбновление статуса по активности
+
+Provisioning --> IAM : REST / Events\nСоздание/обновление пользователей
+Provisioning --> CallControl : REST / Events\nНомера, маршрутизация
+Provisioning --> Billing : REST / Events\nТарифы, биллинг-параметры
+
+CallControl --> Billing : Events (CDR)\nДетализация вызовов
+MediaRec --> Billing : Events\nИнформация о записях
+Billing --> CRM : REST / Export\nОтчётность и интеграции
+
+Notify --> ESMSGW : SMTP / HTTPS\nУведомления (email/SMS/push)
+APIGW --> Notify : REST / Events\nСистемные и бизнес-события
+
+UCClients --> Chat : WebSocket\nРеальный время обмен сообщениями
+
+UCClients --> Observability : Metrics / Logs (клиент)\nКлиентская телеметрия (опционально)
+APIGW --> Observability : Metrics / Logs / Traces
+CallControl --> Observability : Metrics / Logs / Traces
+SIPGW --> Observability : Metrics / Logs
+WebRTCGW --> Observability : Metrics / Logs
+Chat --> Observability : Metrics / Logs
+MediaRec --> Observability : Metrics / Logs
+Billing --> Observability : Metrics / Logs
+Notify --> Observability : Metrics / Logs
+Provisioning --> Observability : Metrics / Logs
+
+note right of APIGW
+  API Gateway концентрирует весь\nвнешний API-трафик и обеспечивает\nаутентификацию, авторизацию,\nлиметирование и версионирование API.
+end note
+
+note bottom of Observability
+  Observability Stack реализует\nединый контур наблюдаемости:\nметрики, логи и трассировки\nс поддержкой корреляции запросов.
+end note
+
+@enduml
