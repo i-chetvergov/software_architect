@@ -31,44 +31,32 @@ plugins:
 - swagger-ui-tag
 - enumerate-headings
 
-# Пока нет puml-структуры/папок — отключаем PlantUML-рендеринг,
-# чтобы CI не завалился из-за отсутствующих путей.
-# (Рекомендуется включать после появления diagrams/src)
-# - build_plantuml:
-#     render: server
-#     server: https://www.plantuml.com/plantuml
-#     output_format: svg
-#     diagram_root: diagrams
-#     input_folder: src
-#     output_folder: out
-
 nav:
 - Главная: index.md
 
-# Ниже — закомментировано до момента, пока вы не добавите соответствующие файлы в docs/
-#
-# - Проект:
-#   - О проекте: about.md
-#   - Сокращения: abbreviations.md
-#   - Глоссарий: glossary.md
-#
-# - 1. Проблема: 01_problem/index.md
-# - 2. Контекст: 02_context/index.md
-# - 3. Бизнес-цели: 03_business_goals/index.md
-# - 4. Архитектурные драйверы: 04_arch_drivers/index.md
-# - 5. Ограничения: 05_constraints/index.md
-# - 6. Требования: 06_requirements/index.md
-# - 7. Use Case: 07_use_cases/index.md
-# - 8. Атрибуты качества: 08_quality_scenarios/index.md
-# - 9. Решение: 09_solution/index.md
-#
-# - Диаграммы:
-#   - Обзор: 10_diagrams/index.md
-#   - C4 Контекст: 10_diagrams/c4_context.md
-#   - C4 Контейнеры: 10_diagrams/c4_containers.md
-#   - Развёртывание: 10_diagrams/deployment.md
-#   - Sequence: 10_diagrams/sequences.md
-#
-# - ADR:
-#   - Индекс: adr/index.md
-# - ADL: adl/index.md
+- Проект:
+  - О проекте: about.md
+  - Сокращения: abbreviations.md
+  - Глоссарий: glossary.md
+
+- Архитектурный кейс:
+  - 1. Описание проблемы: 01_problem/index.md
+  - 2. Контекст: 02_context/index.md
+  - 3. Бизнес-цели: 03_business_goals/index.md
+  - 4. Архитектурные драйверы: 04_arch_drivers/index.md
+  - 5. Ограничения: 05_constraints/index.md
+  - 6. Требования: 06_requirements/index.md
+  - 7. Пользовательские сценарии: 07_use_cases/index.md
+  - 8. Атрибуты качества: 08_quality_scenarios/index.md
+  - 9. Архитектурное решение: 09_solution/index.md
+
+- Диаграммы:
+  - Обзор: 10_diagrams/index.md
+  - C4 Контекст: 10_diagrams/c4_context.md
+  - C4 Контейнеры: 10_diagrams/c4_containers.md
+  - Развёртывание: 10_diagrams/deployment.md
+  - Sequence: 10_diagrams/sequences.md
+
+- Архитектурные решения:
+  - ADR: adr/index.md
+  - ADL: adl/index.md
