@@ -1,0 +1,18 @@
+{% import "partials/language.html" as lang with context %}
+
+<footer class="md-footer">
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid" style="padding: 14px 0;">
+      <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; width:100%;">
+        <div style="opacity:.86;">
+          <strong>Software Architect</strong> · Проект: <strong>Unified Communications Platform</strong>
+        </div>
+        <div style="display:flex; gap:12px; align-items:center;">
+          <a href="{{ config.repo_url }}" style="text-decoration:none; font-weight:600;">GitHub</a>
+          <span style="opacity:.55;">|</span>
+          <span style="opacity:.75;">{{ config.site_name }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>

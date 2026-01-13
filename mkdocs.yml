@@ -7,6 +7,7 @@ repo_url: https://github.com/i-chetvergov/software_architect
 
 theme:
   name: material
+  custom_dir: overrides
   language: ru
   palette:
   - media: "(prefers-color-scheme: light)"
@@ -118,3 +119,6 @@ nav:
 
 extra_css:
 - stylesheets/extra.css
+
+extra_javascript:
+- javascripts/extra.js

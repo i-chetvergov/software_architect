@@ -1,0 +1,39 @@
+/* Общая типографика */
+.md-typeset { font-size: 0.98rem; line-height: 1.65; }
+.md-typeset h1 { letter-spacing: .2px; margin-bottom: .6em; }
+.md-typeset h2 { margin-top: 1.8em; }
+.md-typeset h3 { margin-top: 1.4em; }
+
+/* Таблицы (глоссарий, трассировки, требования) */
+.md-typeset table:not([class]) {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+.md-typeset table:not([class]) th {
+  font-weight: 650;
+  background: color-mix(in srgb, var(--md-accent-fg-color) 8%, transparent);
+}
+.md-typeset table:not([class]) td,
+.md-typeset table:not([class]) th { padding: .75em .9em; }
+
+/* Admonition и details */
+.md-typeset .admonition, .md-typeset details {
+  border-radius: 14px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.08);
+}
+
+/* Кодовые блоки */
+.md-typeset pre {
+  border-radius: 14px;
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* Ссылки */
+.md-typeset a {
+  text-underline-offset: .18em;
+  text-decoration-thickness: .08em;
+}
+
+/* Мелкая эстетика: чуть “чистый” сайдбар */
+.md-nav__link { border-radius: 10px; }
