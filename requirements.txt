@@ -1,0 +1,5 @@
+mkdocs-material
+mkdocs-glightbox
+mkdocs-swagger-ui-tag
+mkdocs-build-plantuml-plugin
+mkdocs-enumerate-headings-plugin
