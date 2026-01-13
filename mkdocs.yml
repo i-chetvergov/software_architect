@@ -75,7 +75,11 @@ plugins:
 - search
 - glightbox
 - swagger-ui-tag
-- enumerate-headings
+- enumerate-headings:
+    exclude:
+    - index.md
+    - about.md
+    - glossary.md
 
 extra:
   social:

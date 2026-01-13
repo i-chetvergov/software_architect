@@ -13,8 +13,17 @@
       var(--md-default-bg-color);
     box-shadow: 0 18px 48px rgba(0,0,0,.10);
   }
-  .hero h1 { margin: 0 0 8px; }
+
+  /* ВАЖНО: вместо h1 используем div, чтобы enumerate-headings не добавлял "1." */
+  .hero__title {
+    font-size: clamp(1.8rem, 2.6vw, 2.6rem);
+    font-weight: 800;
+    line-height: 1.12;
+    margin: 0 0 8px;
+    letter-spacing: .2px;
+  }
   .hero p { margin: 0 0 12px; max-width: 72ch; }
+
   .badges { display:flex; flex-wrap:wrap; gap:8px; margin: 10px 0 14px; }
   .badge {
     font-size: .82rem;
@@ -23,6 +32,7 @@
     border: 1px solid var(--md-default-fg-color--lightest);
     background: color-mix(in srgb, var(--md-accent-fg-color) 8%, transparent);
   }
+
   .hero-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top: 12px; }
   .btn {
     display:inline-flex; align-items:center; gap:8px;
@@ -30,7 +40,7 @@
     border-radius: 12px;
     border: 1px solid var(--md-default-fg-color--lightest);
     text-decoration: none !important;
-    font-weight: 600;
+    font-weight: 650;
     background: var(--md-default-bg-color);
     box-shadow: 0 10px 26px rgba(0,0,0,.08);
     transition: transform .12s ease, box-shadow .12s ease;
@@ -40,6 +50,7 @@
     border-color: color-mix(in srgb, var(--md-accent-fg-color) 40%, var(--md-default-fg-color--lightest));
     background: color-mix(in srgb, var(--md-accent-fg-color) 12%, var(--md-default-bg-color));
   }
+
   .cards { display:grid; gap:14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin: 16px 0 10px; }
   .card {
     border-radius: 16px;
@@ -50,57 +61,76 @@
     transition: transform .12s ease, box-shadow .12s ease;
   }
   .card:hover { transform: translateY(-2px); box-shadow: 0 16px 44px rgba(0,0,0,.12); }
-  .card h3 { margin: 0 0 6px; }
+
+  /* ВАЖНО: вместо h3 используем div, чтобы enumerate-headings не нумеровал карточки */
+  .card__title { font-size: 1.05rem; font-weight: 800; margin: 0 0 6px; }
   .card p { margin: 0 0 10px; }
-  .card a { font-weight: 700; text-decoration: none !important; }
+  .card a { font-weight: 750; text-decoration: none !important; }
+
+  /* Убираем заголовок из index.md (тот, который стал "2. Главная") */
+  .home-body > h1:first-child,
+  .home-body > h2:first-child {
+    display: none;
+  }
 </style>
 
-<div class="hero">
-  <h1>Платформа Unified Communications</h1>
-  <p>
-    Документация проектной работы курса <strong>Software Architect</strong>.
-    Проект описывает корпоративную UC-платформу: голос, видео, сообщения, присутствие,
-    интеграции с CRM/ERP и автоматизация через API/ботов.
-  </p>
+<div class="md-content__inner md-typeset">
 
-  <div class="badges">
-    <span class="badge">Enterprise</span>
-    <span class="badge">CRM / ERP интеграции</span>
-    <span class="badge">SIP / WebRTC</span>
-    <span class="badge">Security &amp; HA</span>
-    <span class="badge">C4 + ADR</span>
+  <div class="hero">
+    <div class="hero__title">Платформа “Унифицированных коммуникаций” (Unified Communications)</div>
+
+    <p>
+      Этот сайт содержит документацию проектной работы курса <strong>Software Architect</strong>.
+      Проект описывает корпоративную UC‑платформу: голос, видео, сообщения, присутствие,
+      интеграции с CRM/ERP и автоматизацию через API/ботов.
+    </p>
+
+    <div class="badges">
+      <span class="badge">Enterprise</span>
+      <span class="badge">CRM / ERP интеграции</span>
+      <span class="badge">SIP / WebRTC</span>
+      <span class="badge">Security &amp; HA</span>
+      <span class="badge">C4 + ADR</span>
+    </div>
+
+    <div class="hero-actions">
+      <a class="btn primary" href="about/">О проекте</a>
+      <a class="btn" href="06_requirements/">Требования</a>
+      <a class="btn" href="10_diagrams/">Диаграммы</a>
+      <a class="btn" href="adr/">ADR</a>
+    </div>
   </div>
 
-  <div class="hero-actions">
-    <a class="btn primary" href="about/">О проекте</a>
-    <a class="btn" href="06_requirements/">Требования</a>
-    <a class="btn" href="10_diagrams/">Диаграммы</a>
-    <a class="btn" href="adr/">ADR</a>
+  <div class="cards">
+    <div class="card">
+      <div class="card__title">Архитектурный кейс</div>
+      <p>Проблема, контекст, цели, драйверы, ограничения и трассировка решений.</p>
+      <a href="01_problem/">Открыть →</a>
+    </div>
+
+    <div class="card">
+      <div class="card__title">Требования</div>
+      <p>Функциональные и нефункциональные требования UC‑платформы и интеграций.</p>
+      <a href="06_requirements/">Открыть →</a>
+    </div>
+
+    <div class="card">
+      <div class="card__title">Диаграммы</div>
+      <p>C4 Context/Containers, развертывание, sequence‑сценарии.</p>
+      <a href="10_diagrams/">Открыть →</a>
+    </div>
+
+    <div class="card">
+      <div class="card__title">Архитектурные решения</div>
+      <p>Журнал ADL/ADR: допущения, компромиссы, принятые решения.</p>
+      <a href="adr/">Открыть →</a>
+    </div>
   </div>
+
+  <!-- Текст из index.md оставляем, но прячем его первый заголовок CSS-ом -->
+  <div class="home-body">
+    {{ page.content }}
+  </div>
+
 </div>
-
-<div class="cards">
-  <div class="card">
-    <h3>Архитектурный кейс</h3>
-    <p>Проблема, контекст, цели, драйверы, ограничения и трассировка решений.</p>
-    <a href="01_problem/">Открыть →</a>
-  </div>
-  <div class="card">
-    <h3>Требования</h3>
-    <p>Функциональные и нефункциональные требования UC-платформы и интеграций.</p>
-    <a href="06_requirements/">Открыть →</a>
-  </div>
-  <div class="card">
-    <h3>Диаграммы</h3>
-    <p>C4 Context/Containers, развертывание, sequence-сценарии.</p>
-    <a href="10_diagrams/">Открыть →</a>
-  </div>
-  <div class="card">
-    <h3>Архитектурные решения</h3>
-    <p>Журнал ADL/ADR: допущения, компромиссы, принятые решения.</p>
-    <a href="adr/">Открыть →</a>
-  </div>
-</div>
-
-{{ super() }}
 {% endblock %}
