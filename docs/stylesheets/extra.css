@@ -314,3 +314,21 @@
     0 12px 28px rgba(0,0,0,.3),
     0 0 0 1px color-mix(in srgb, var(--md-accent-fg-color) 30%, transparent) inset;
 }
+
+/* Стили для SVG изображения на главной странице */
+.hero-uc {
+  margin: 0 auto 1.2rem auto;
+  max-width: 1200px;
+}
+
+.hero-uc img,
+.hero-uc object {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 18px; /* чтобы совпадало с card feel */
+}
+
+.hero-uc object {
+  min-height: 400px;
+}

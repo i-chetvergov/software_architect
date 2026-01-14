@@ -126,16 +126,16 @@ nav:
 
 - Принятые архитектурные решения (ADL):
   - ADL: adl/index.md
-  - ADR-001: adr/ADR-001.md
-  - ADR-002: adr/ADR-002.md
-  - ADR-003: adr/ADR-003.md
-  - ADR-004: adr/ADR-004.md
-  - ADR-005: adr/ADR-005.md
-  - ADR-006: adr/ADR-006.md
-  - ADR-007: adr/ADR-007.md
-  - ADR-008: adr/ADR-008.md
-  - ADR-009: adr/ADR-009.md
-  - ADR-010: adr/ADR-010.md
+  - ADR-001. Архитектурный стиль и границы сервисов (DDD/Bounded Contexts): adr/ADR-001.md
+  - ADR-002. Синхронные и асинхронные коммуникации (REST/gRPC + event bus): adr/ADR-002.md
+  - ADR-003. Выбор хранилищ (OLTP/NoSQL/Time-series) и распределение данных: adr/ADR-003.md
+  - ADR-004. IAM/OIDC, сервисные токены и mTLS между сервисами: adr/ADR-004.md
+  - ADR-005. Observability (логи/метрики/трейсы) и корреляция вызовов: adr/ADR-005.md
+  - ADR-006. HA/Failover стратегии и SLO для UC-платформы: adr/ADR-006.md
+  - ADR-007. API Gateway и стратегия версионирования API: adr/ADR-007.md
+  - ADR-008. Управление конфигурацией и секретами: adr/ADR-008.md
+  - ADR-009. Интеграция SIP/WebRTC и медиа-плоскости: adr/ADR-009.md
+  - ADR-010. Стратегия данных CDR/Recording/Retention: adr/ADR-010.md
 
 extra_css:
 - stylesheets/extra.css

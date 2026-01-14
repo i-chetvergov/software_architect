@@ -4,72 +4,29 @@
 <style>
   .hero {
     margin: 0 0 48px;
-    padding: 56px 40px;
+    padding: 0;
     border-radius: 20px;
-    border: 1px solid var(--md-default-fg-color--lightest);
+    border: none;
     position: relative;
     overflow: hidden;
-    background:
-      /* Фоновое изображение сети связи */
-      url('assets/images/telecom-bg.svg') center/cover no-repeat,
-      /* Наложение для адаптации к теме */
-      linear-gradient(
-        to bottom,
-        color-mix(in srgb, var(--md-default-bg-color) 88%, transparent),
-        color-mix(in srgb, var(--md-default-bg-color) 94%, transparent)
-      ),
-      /* Дополнительный градиент для глубины */
-      radial-gradient(1400px 500px at 25% 0%, color-mix(in srgb, var(--md-accent-fg-color) 12%, transparent), transparent 65%),
-      var(--md-default-bg-color);
-    background-blend-mode: overlay, normal, normal;
+    background: url('assets/images/telecom-bg.svg') center/cover no-repeat;
     box-shadow: 
       0 12px 32px rgba(0,0,0,.08),
       0 0 0 1px rgba(255,255,255,.05) inset;
-    text-align: center;
+    min-height: 600px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-start;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
   }
 
-  .hero::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--md-accent-fg-color) 4%, transparent) 0%, transparent 50%);
-    pointer-events: none;
-    z-index: 0;
-  }
-
   .hero__title {
-    font-size: clamp(2.2rem, 4vw, 3.2rem);
-    font-weight: 800;
-    line-height: 1.15;
-    margin: 0 0 20px;
-    letter-spacing: -.03em;
-    position: relative;
-    z-index: 1;
-    background: linear-gradient(
-      135deg,
-      var(--md-default-fg-color) 0%,
-      color-mix(in srgb, var(--md-default-fg-color) 85%, var(--md-accent-fg-color)) 100%
-    );
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    display: none;
   }
 
   .hero__subtitle {
-    font-size: 1.15rem;
-    line-height: 1.7;
-    margin: 0;
-    color: var(--md-default-fg-color--lighter);
-    max-width: 720px;
-    margin-left: auto;
-    margin-right: auto;
-    position: relative;
-    z-index: 1;
-    font-weight: 400;
+    display: none;
   }
 
   .hero-actions {
@@ -233,9 +190,10 @@
   /* Адаптивность для мобильных устройств */
   @media (max-width: 768px) {
     .hero {
-      padding: 40px 28px;
-      background-size: cover, cover, cover;
+      padding: 0;
+      background-size: cover;
       border-radius: 16px;
+      min-height: 400px;
     }
     .section-card {
       padding: 20px 24px;
@@ -257,16 +215,7 @@
   
   /* Для тёмной темы - улучшенная адаптация */
   [data-md-color-scheme="slate"] .hero {
-    background:
-      url('assets/images/telecom-bg.svg') center/cover no-repeat,
-      linear-gradient(
-        to bottom,
-        color-mix(in srgb, var(--md-default-bg-color) 92%, black),
-        color-mix(in srgb, var(--md-default-bg-color) 96%, black)
-      ),
-      radial-gradient(1400px 500px at 25% 0%, color-mix(in srgb, var(--md-accent-fg-color) 8%, transparent), transparent 65%),
-      var(--md-default-bg-color);
-    background-blend-mode: overlay, normal, normal;
+    background: url('assets/images/telecom-bg.svg') center/cover no-repeat;
     box-shadow: 
       0 12px 32px rgba(0,0,0,.2),
       0 0 0 1px rgba(255,255,255,.03) inset;

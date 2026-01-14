@@ -1,87 +1,125 @@
-<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg">
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="UC Network Hero">
   <defs>
-    <!-- Градиенты для узлов сети -->
-    <radialGradient id="nodeGradient1" cx="50%" cy="50%">
-      <stop offset="0%" style="stop-color:#3F51B5;stop-opacity:0.4" />
-      <stop offset="100%" style="stop-color:#3F51B5;stop-opacity:0" />
+    <style><![CDATA[
+      /* ====== Palette binding to MkDocs Material ======
+         We bind to Material CSS vars (available on the page).
+         Fallbacks are provided for local preview / raw SVG view. */
+      :root{
+        --bg: var(--md-default-bg-color, #ffffff);
+        --fg: var(--md-default-fg-color, #1f2937);
+
+        --primary: var(--md-primary-fg-color, #3F51B5);
+        --accent:  var(--md-accent-fg-color,  #00B8D4);
+
+        /* Lines */
+        --line-strong: color-mix(in srgb, var(--primary) 65%, transparent);
+        --line-soft:   color-mix(in srgb, var(--primary) 28%, transparent);
+        --line-accent: color-mix(in srgb, var(--accent) 45%, transparent);
+
+        /* Nodes (pins) */
+        --node-fill:   color-mix(in srgb, var(--accent) 82%, #0B1220 18%);
+        --node-stroke: color-mix(in srgb, var(--accent) 60%, transparent);
+
+        /* Card border */
+        --card-stroke: color-mix(in srgb, var(--fg) 10%, transparent);
+
+        /* Shadow */
+        --shadow: rgba(0,0,0,.18);
+      }
+
+      /* When browser does not support color-mix, use safe fallbacks */
+      @supports not (color: color-mix(in srgb, #000 50%, #fff)){
+        :root{
+          --line-strong: rgba(63,81,181,.45);
+          --line-soft: rgba(63,81,181,.18);
+          --line-accent: rgba(0,184,212,.30);
+          --node-fill: #0aa6b8;
+          --node-stroke: rgba(0,184,212,.45);
+          --card-stroke: rgba(15,23,42,.10);
+        }
+      }
+    ]]></style>
+
+    <filter id="softShadow" x="-20%" y="-30%" width="140%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="var(--shadow)" flood-opacity="1"/>
+    </filter>
+
+    <radialGradient id="bgGlow" cx="50%" cy="40%" r="75%">
+      <stop offset="0" stop-color="color-mix(in srgb, var(--primary) 14%, transparent)"/>
+      <stop offset="1" stop-color="rgba(0,0,0,0)"/>
     </radialGradient>
-    <radialGradient id="nodeGradient2" cx="50%" cy="50%">
-      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:0.35" />
-      <stop offset="100%" style="stop-color:#2196F3;stop-opacity:0" />
+
+    <!-- Node glossy highlight -->
+    <radialGradient id="nodeGloss" cx="35%" cy="30%" r="65%">
+      <stop offset="0" stop-color="rgba(255,255,255,.75)"/>
+      <stop offset="1" stop-color="rgba(255,255,255,0)"/>
     </radialGradient>
-    <radialGradient id="nodeGradient3" cx="50%" cy="50%">
-      <stop offset="0%" style="stop-color:#00BCD4;stop-opacity:0.3" />
-      <stop offset="100%" style="stop-color:#00BCD4;stop-opacity:0" />
-    </radialGradient>
-    
-    <!-- Градиент для линий соединений -->
-    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3F51B5;stop-opacity:0.15" />
-      <stop offset="50%" style="stop-color:#2196F3;stop-opacity:0.2" />
-      <stop offset="100%" style="stop-color:#00BCD4;stop-opacity:0.15" />
-    </linearGradient>
-    
-    <!-- Градиент для фона -->
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#E3F2FD;stop-opacity:0.3" />
-      <stop offset="50%" style="stop-color:#BBDEFB;stop-opacity:0.2" />
-      <stop offset="100%" style="stop-color:#E1F5FE;stop-opacity:0.3" />
-    </linearGradient>
   </defs>
-  
-  <!-- Фоновый градиент -->
-  <rect width="100%" height="100%" fill="url(#bgGradient)" />
-  
-  <!-- Основные узлы сети (центральные точки связи) -->
-  <circle cx="200" cy="200" r="80" fill="url(#nodeGradient1)" />
-  <circle cx="1720" cy="300" r="100" fill="url(#nodeGradient2)" />
-  <circle cx="400" cy="800" r="90" fill="url(#nodeGradient3)" />
-  <circle cx="1500" cy="900" r="85" fill="url(#nodeGradient1)" />
-  <circle cx="960" cy="400" r="95" fill="url(#nodeGradient2)" />
-  <circle cx="1200" cy="600" r="75" fill="url(#nodeGradient3)" />
-  <circle cx="300" cy="500" r="70" fill="url(#nodeGradient2)" />
-  <circle cx="1600" cy="700" r="80" fill="url(#nodeGradient1)" />
-  
-  <!-- Малые узлы (периферийные устройства) -->
-  <circle cx="150" cy="150" r="25" fill="#3F51B5" opacity="0.25" />
-  <circle cx="1800" cy="250" r="30" fill="#2196F3" opacity="0.25" />
-  <circle cx="350" cy="750" r="28" fill="#00BCD4" opacity="0.25" />
-  <circle cx="1450" cy="850" r="27" fill="#3F51B5" opacity="0.25" />
-  <circle cx="900" cy="350" r="32" fill="#2196F3" opacity="0.25" />
-  <circle cx="1150" cy="550" r="26" fill="#00BCD4" opacity="0.25" />
-  <circle cx="250" cy="450" r="24" fill="#2196F3" opacity="0.25" />
-  <circle cx="1550" cy="650" r="29" fill="#3F51B5" opacity="0.25" />
-  <circle cx="600" cy="300" r="22" fill="#00BCD4" opacity="0.25" />
-  <circle cx="1300" cy="400" r="31" fill="#2196F3" opacity="0.25" />
-  <circle cx="800" cy="700" r="23" fill="#3F51B5" opacity="0.25" />
-  <circle cx="1100" cy="800" r="28" fill="#00BCD4" opacity="0.25" />
-  
-  <!-- Соединения между узлами (линии связи) -->
-  <line x1="200" y1="200" x2="960" y2="400" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
-  <line x1="1720" y1="300" x2="960" y2="400" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
-  <line x1="400" y1="800" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
-  <line x1="1500" y1="900" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
-  <line x1="960" y1="400" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
-  <line x1="300" y1="500" x2="960" y2="400" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
-  <line x1="1600" y1="700" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
-  <line x1="200" y1="200" x2="300" y2="500" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
-  <line x1="1720" y1="300" x2="1600" y2="700" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
-  <line x1="400" y1="800" x2="300" y2="500" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
-  <line x1="1500" y1="900" x2="1600" y2="700" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
-  
-  <!-- Дополнительные соединения для более сложной сети -->
-  <line x1="200" y1="200" x2="400" y2="800" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
-  <line x1="1720" y1="300" x2="1500" y2="900" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
-  <line x1="300" y1="500" x2="400" y2="800" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
-  <line x1="1600" y1="700" x2="1500" y2="900" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
-  
-  <!-- Волновые паттерны (символизируют сигналы связи) -->
-  <path d="M 100 200 Q 150 180, 200 200 T 300 200" stroke="#2196F3" stroke-width="1.5" fill="none" opacity="0.15" />
-  <path d="M 1620 300 Q 1670 280, 1720 300 T 1820 300" stroke="#3F51B5" stroke-width="1.5" fill="none" opacity="0.15" />
-  <path d="M 300 800 Q 350 780, 400 800 T 500 800" stroke="#00BCD4" stroke-width="1.5" fill="none" opacity="0.15" />
-  
-  <!-- Центральный узел (hub) - символизирует UC-платформу -->
-  <circle cx="960" cy="400" r="8" fill="#3F51B5" opacity="0.6" />
-  <circle cx="960" cy="400" r="15" fill="#2196F3" opacity="0.3" />
-  <circle cx="960" cy="400" r="25" fill="#00BCD4" opacity="0.15" />
+
+  <!-- Background -->
+  <rect width="1600" height="900" fill="var(--bg)"/>
+
+  <!-- Network lines (styled like your photo: thin, some stronger edges, some accent lines) -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Strong edges -->
+    <path d="M240 140 L520 80 L820 180 L1060 120 L1320 250" stroke="var(--line-strong)" stroke-width="2.6"/>
+    <path d="M240 140 L320 360 L560 520 L860 430 L1060 680" stroke="var(--line-strong)" stroke-width="2.6"/>
+    <path d="M560 520 L520 80" stroke="var(--line-strong)" stroke-width="2.6"/>
+    <path d="M860 430 L820 180" stroke="var(--line-strong)" stroke-width="2.6"/>
+    <path d="M860 430 L1320 250" stroke="var(--line-strong)" stroke-width="2.6"/>
+
+    <!-- Soft mesh lines -->
+    <path d="M520 80 L320 360" stroke="var(--line-soft)" stroke-width="2.0"/>
+    <path d="M320 360 L820 180" stroke="var(--line-soft)" stroke-width="2.0"/>
+    <path d="M320 360 L860 430" stroke="var(--line-soft)" stroke-width="2.0"/>
+    <path d="M560 520 L1320 250" stroke="var(--line-soft)" stroke-width="2.0"/>
+    <path d="M560 520 L1060 680" stroke="var(--line-soft)" stroke-width="2.0"/>
+    <path d="M1060 120 L860 430" stroke="var(--line-soft)" stroke-width="2.0"/>
+    <path d="M1060 120 L1320 250" stroke="var(--line-soft)" stroke-width="2.0"/>
+
+    <!-- Accent lines (light cyan like in your photo) -->
+    <path d="M240 140 L560 520 L1060 680" stroke="var(--line-accent)" stroke-width="2.0"/>
+    <path d="M520 80 L820 180 L1320 250" stroke="var(--line-accent)" stroke-width="2.0"/>
+  </g>
+
+  <!-- Nodes (pins) -->
+  <g>
+    <!-- helper: node = circle + gloss -->
+    <g id="node">
+      <circle r="16" fill="var(--node-fill)" stroke="var(--node-stroke)" stroke-width="2"/>
+      <circle r="16" fill="url(#nodeGloss)" opacity=".55"/>
+      <circle r="4.5" fill="rgba(255,255,255,.65)"/>
+    </g>
+
+    <g transform="translate(240 140)"><use href="#node"/></g>
+    <g transform="translate(520 80)"><use href="#node"/></g>
+    <g transform="translate(820 180)"><use href="#node"/></g>
+    <g transform="translate(1060 120)"><use href="#node"/></g>
+    <g transform="translate(1320 250)"><use href="#node"/></g>
+
+    <g transform="translate(320 360)"><use href="#node"/></g>
+    <g transform="translate(560 520)"><use href="#node"/></g>
+    <g transform="translate(860 430)"><use href="#node"/></g>
+    <g transform="translate(1060 680)"><use href="#node"/></g>
+  </g>
+
+  <!-- Minimal caption (optional). Remove if not needed -->
+  <g opacity=".92">
+    <text x="140" y="770"
+          font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Noto Sans, Liberation Sans, sans-serif"
+          font-size="42" font-weight="800" fill="var(--fg)" letter-spacing="-0.02em">
+      Платформа унифицированных коммуникаций (Unified Communications)
+    </text>
+    <text x="140" y="815"
+          font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Noto Sans, Liberation Sans, sans-serif"
+          font-size="18" font-weight="600" fill="color-mix(in srgb, var(--fg) 65%, transparent)">
+      Voice • Video • Chat • Presence • Integrations
+    </text>
+    <text x="140" y="850"
+          font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, Noto Sans, Liberation Sans, sans-serif"
+          font-size="16" font-weight="400" fill="color-mix(in srgb, var(--fg) 55%, transparent)">
+      Класс корпоративных информационных платформ, предназначенных для объединения различных средств делового общения в единую цифровую среду организации.
+    </text>
+  </g>
 </svg>
