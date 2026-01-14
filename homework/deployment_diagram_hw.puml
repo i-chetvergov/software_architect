@@ -1,0 +1,269 @@
+@startuml
+title Диаграмма развертывания "Мир веб-крафта"
+
+skinparam linetype ortho
+skinparam shadowing false
+skinparam defaultTextAlignment center
+left to right direction
+
+skinparam node {
+  BackgroundColor #F5F5F5
+  BorderColor #424242
+  RoundCorner 10
+}
+skinparam database {
+  BackgroundColor #EFEBE9
+  BorderColor #5D4037
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #616161
+}
+
+' ============ КЛИЕНТ И ИНТЕРНЕТ ============
+
+node "Устройство игрока\n(ПК / ноутбук / планшет)" as client_node {
+  artifact "Браузер\n+ Web-клиент.wasm" as browser_wasm
+}
+
+cloud "Интернет / CDN" as internet {
+  node "CDN статики\nи игровых ассетов" as cdn_node
+}
+
+' ============ ОБЛАЧНЫЙ РЕГИОН ============
+
+cloud "Облачный провайдер\nRegion EU-1" as cloud {
+
+  ' ---- Публичная подсеть ----
+  node "Публичная подсеть\n(L7 балансировщик / периметр)" as public_net {
+    node "API-шлюз / WAF\n(ingress)" as api_gw_node {
+      artifact "api-gateway\n+ auth-edge" as api_gw_art
+    }
+  }
+
+  ' ---- Приватная подсеть: приложения ----
+  node "Приватная подсеть\nKubernetes-кластер (apps)" as k8s_app {
+
+    node "Пул воркеров\n(приложения)" as app_workers {
+      artifact "runtime-pod\nmm, lob, chat, gs-control" as pod_runtime
+      artifact "commerce-pod\ncatalog, orders,\npayments, inventory" as pod_commerce
+      artifact "ugc-pod\nugc-api, moderation" as pod_ugc
+      artifact "social-pod\ntournaments" as pod_social
+      artifact "platform-pod\nauth-core, profiles,\nconfig, anticheat,\nobservability-agent" as pod_platform
+    }
+  }
+
+  ' ---- Приватная подсеть: игровые серверы ----
+  node "Приватная подсеть\nПул игровых серверов" as k8s_game {
+    node "Autoscaling group\n(игровые сервера)" as game_pool {
+      artifact "game-server\n(authoritative)\nN экземпляров" as game_srv_art
+    }
+  }
+
+  ' ---- Приватная подсеть: данные ----
+  node "Приватная подсеть\nСлой данных" as data_net {
+
+    node "PostgreSQL HA-кластер" as pg_cluster {
+      database "DB_ACCOUNTS\n(аккаунты, профили,\nfeature_flags)" as db_accounts
+      database "DB_GAMEPLAY\nлобби, матчи,\nтурниры, зрители" as db_gameplay
+      database "DB_COMMERCE\nкаталог, заказы,\nплатежи, инвентарь" as db_commerce
+    }
+
+    node "Документо-ориентированная БД\n(DocumentDB / Mongo)" as docdb_node {
+      database "DB_UGC\nпользовательские карты,\nмоды, правила" as db_ugc
+    }
+
+    node "Хранилище метрик\n(Time-series / Column)" as tsdb_node {
+      database "DB_METRICS\nтех. и бизнес-метрики" as db_metrics
+    }
+
+    node "Redis-кластер\n(кэш / сессии)" as redis_node {
+      artifact "Redis\nкэш профилей,\nочередей, лобби,\nfeature-флагов" as redis_art
+    }
+
+    node "Kafka / RabbitMQ кластер\n(шина событий)" as mq_node {
+      artifact "message-bus\nзаказы, платежи,\nмодерация, служебные события" as mq_art
+    }
+  }
+}
+
+' ============ ВНЕШНИЕ СИСТЕМЫ ============
+
+cloud "Платёжные провайдеры\n(Stripe / PayPal и др.)" as psp_cloud
+cloud "Внешний античит-сервис\n(EasyAntiCheat и аналоги)" as anticheat_cloud
+
+' ============ СОЕДИНЕНИЯ ============
+
+' --- Клиент и Интернет ---
+client_node --> cdn_node      : HTTPS\nстатические файлы,\nассеты, UGC-медиа
+client_node --> api_gw_node   : HTTPS\nREST / Web API
+client_node --> game_pool     : WebTransport/UDP\nигровой трафик\n(input / state)
+client_node --> k8s_app       : WebSocket/WebRTC\nголосовой чат\n(сервис chat)
+
+' --- Публичный периметр к приложениям ---
+api_gw_node --> app_workers   : HTTP/gRPC\nвнутренний трафик API
+
+' --- Приложения к данным ---
+pod_platform --> db_accounts  : SQL\nаккаунты, профили,\nfeature_flags
+pod_runtime  --> db_gameplay  : SQL\nлобби, матчи,\nтурниры, зрители
+pod_commerce --> db_commerce  : SQL\nзаказы, платежи,\nинвентарь
+pod_ugc      --> db_ugc       : CRUD / документный API\nUGC-объекты и статусы
+pod_social   --> db_gameplay  : SQL\nструктуры турниров
+
+' --- Приложения к кэшу и очередям ---
+pod_runtime  --> redis_node   : Redis\nочереди матчмейкинга,\nактивные лобби
+pod_commerce --> redis_node   : Redis\nкэш витрины,\nбалансы инвентаря
+pod_platform --> redis_node   : Redis\nсессии, токены,\nfeature-флаги
+pod_ugc      --> redis_node   : Redis\nпопулярный контент UGC
+
+pod_commerce --> mq_node      : Events\nзаказы, платежи [async]
+pod_ugc      --> mq_node      : Events\nмодерация UGC [async]
+pod_platform --> mq_node      : Events\nслужебные события [async]
+pod_runtime  --> mq_node      : Events\nсобытия матчей / логика [async]
+
+' --- Игровые серверы к данным и метрикам ---
+game_pool --> db_gameplay     : SQL / batch\nрезультаты матчей
+game_pool --> redis_node      : Redis\nсостояние сессий,\nбыстрые lookup
+game_pool --> tsdb_node       : Time-series\nRTT, FPS, ошибки,\nнагрузка [async]
+
+' --- Метрики приложений ---
+pod_runtime  --> tsdb_node    : Метрики runtime\nпоиск, матчи, чат [async]
+pod_commerce --> tsdb_node    : Метрики монетизации\nконверсия, ошибки [async]
+pod_ugc      --> tsdb_node    : Метрики UGC [async]
+pod_social   --> tsdb_node    : Метрики турниров [async]
+pod_platform --> tsdb_node    : Метрики auth,\nlatency, ошибки [async]
+
+' --- Внешние интеграции ---
+pod_commerce --> psp_cloud        : HTTPS\nсоздание и подтверждение\nплатежей
+pod_platform --> anticheat_cloud  : HTTPS/API\nпередача сигналов\nантичита
+
+' ============ ПРИМЕЧАНИЯ ============
+
+note top of k8s_app
+  Kubernetes-кластер приложений:
+
+  runtime-pod  = mm, lob, chat, gs-control
+  commerce-pod = catalog, orders,
+                 payments, inventory
+  ugc-pod      = ugc-api, moderation
+  social-pod   = tournaments
+  platform-pod = auth, profiles,
+                 config, anticheat,
+                 observability-agent
+
+  Эти pod'ы соответствуют контейнерам
+  из контейнерной диаграммы.
+
+  Масштабирование выполняется
+  на уровне Deployment/ReplicaSet
+  для каждого типа pod'а.
+end note
+
+note top of k8s_game
+  Пул игровых серверов:
+
+  - отдельный autoscaling group /
+    пул нод под real-time нагрузку;
+  - тюнинг сети и CPU для
+    минимальной задержки.
+
+  Автомасштабирование по метрикам:
+  - число активных матчей;
+  - загрузка CPU;
+  - средний RTT / ошибки.
+end note
+
+note right of pg_cluster
+  PostgreSQL HA-кластер (минимум 2 реплики
+  в разных зонах доступности):
+
+  DB_ACCOUNTS:
+    схема accounts_db
+    (accounts, profiles, feature_flags)
+
+  DB_GAMEPLAY:
+    схема gameplay_db
+    (lobbies, matches, tournaments,
+     spectators и др.)
+
+  DB_COMMERCE:
+    схема commerce_db
+    (products, orders, payments,
+     inventory_items и др.)
+
+  Репликация и резервное
+  копирование — на уровне
+  всего кластера БД.
+end note
+
+note right of docdb_node
+  DocumentDB / Mongo:
+
+  - хранение UGC-объектов в JSON
+    (карты, моды, правила, описания);
+  - поддержка версионирования
+    пользовательских карт и правил;
+  - удобная работа с
+    полуструктурированными данными.
+end note
+
+note right of tsdb_node
+  Хранилище метрик (Time-series / Column):
+
+  - технические метрики:
+    RTT, FPS, ошибки, нагрузка;
+  - бизнес-показатели:
+    регистрации, покупки, retention.
+
+  Используется для алёртов,
+  дашбордов и аналитики
+  без влияния на боевые БД.
+end note
+
+note bottom of redis_node
+  Redis-кластер:
+
+  - кэш часто читаемых данных
+    (профили, инвентарь, витрина);
+  - хранение сессий и токенов;
+  - быстрые структуры данных
+    для очередей матчей и лобби.
+end note
+
+note bottom of mq_node
+  Kafka / RabbitMQ:
+
+  - асинхронные события
+    между микросервисами;
+  - сглаживание пиков нагрузки;
+  - интеграция с аналитикой,
+    обработкой событий и алёртами.
+end note
+
+note bottom
+  Диаграмма развертывания дополняет:
+  - контейнерную диаграмму
+    (какие сервисы существуют);
+  - схему данных (какие БД и схемы
+    используются по доменам).
+
+  Вся чувствительная информация
+  (аккаунты, платежи, игровые данные)
+  размещена в приватных подсетях.
+  Доступ извне возможен только через
+  API-шлюз / WAF в публичной подсети.
+end note
+
+' ============ ЛЕГЕНДА ============
+
+legend bottom
+  == Условные обозначения ==
+  node      Узел развертывания (VM, нода k8s, managed-сервис)
+  database  Экземпляр БД или логическая база в кластере
+  artifact  Развёрнутый сервис / pod / компонент
+
+  -->   Синхронные запросы (HTTP, gRPC, SQL, Redis)
+  ..>   Асинхронные потоки (events, метрики, логирование)
+endlegend
+
+@enduml

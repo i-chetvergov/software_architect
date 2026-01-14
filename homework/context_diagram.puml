@@ -1,0 +1,51 @@
+@startuml
+skinparam linetype ortho
+skinparam arrowColor #999
+skinparam arrowThickness 1.2
+
+title "Мир веб-крафта — Контекстная диаграмма системы"
+
+actor "Игрок" as Player
+actor "Создатель контента\n(UGC Автор)" as Creator
+actor "Организатор турнира" as Organizer
+actor "Гость\n(зритель-призрак)" as Guest
+
+rectangle "Система Web-Craft" {
+  rectangle "Веб-клиент (WASM/WebGL)" as WebClient
+  rectangle "Auth & Identity" as Auth
+  rectangle "Matchmaking / Лобби" as Match
+  rectangle "Игровые серверы\n(Authoritative Servers)" as GameSrv
+  rectangle "Голос и чат (Proximity Chat)" as Chat
+  rectangle "Платежи и магазин" as Store
+  rectangle "UGC / Редактор и модерация" as UGC
+  rectangle "Турниры / События" as Tournaments
+  rectangle "Мониторинг / Логи / Метрики" as Obs
+  rectangle "CDN / Ассеты" as CDN
+}
+
+rectangle "Платежный провайдер (PSP)" as PSP
+rectangle "Анти-чит провайдеры" as AntiCheat
+rectangle "Потоковые платформы\n(для стримов и зрителей)" as Streams
+
+' --- Взаимодействия пользователей ---
+Player --> WebClient : Играет, общается, платит
+Creator --> UGC : Публикует контент
+Organizer --> Tournaments : Создаёт и управляет турнирами
+Guest --> WebClient : Наблюдает (режим призрака)
+
+' --- Взаимодействия системы ---
+WebClient --> Auth : Авторизация (OAuth2/OIDC)
+WebClient --> Match : Поиск матчей / Подбор игроков
+Match --> GameSrv : Назначение игрового сервера
+WebClient --> GameSrv : Реал-тайм взаимодействие\n(UDP/WebTransport)
+WebClient --> Chat : Голосовой и текстовый чат (WebRTC)
+WebClient --> Store : Покупки и инвентарь
+Store --> PSP : Оплата (REST/Webhooks)
+UGC --> CDN : Публикация ассетов
+WebClient --> CDN : Загрузка ассетов
+GameSrv --> Obs : Телеметрия, реплеи, метрики
+Tournaments --> Obs : Результаты матчей, статистика
+GameSrv --> AntiCheat : Сигналы и отчёты
+WebClient --> Streams : Трансляции / наблюдение
+
+@enduml

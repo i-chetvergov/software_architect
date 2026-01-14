@@ -1,0 +1,285 @@
+@startuml
+title Контейнерная диаграмма "Мир веб-крафта" (упрощённая для чтения)
+
+skinparam linetype ortho
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultTextAlignment center
+left to right direction
+
+' ============ ЦВЕТОВАЯ СХЕМА ============
+skinparam package {
+  BackgroundColor<<Игровой процесс>> #E3F2FD
+  BorderColor<<Игровой процесс>> #1976D2
+  BackgroundColor<<Монетизация>> #E8F5E9
+  BorderColor<<Монетизация>> #388E3C
+  BackgroundColor<<UGC>> #FFF3E0
+  BorderColor<<UGC>> #F57C00
+  BackgroundColor<<Социальные>> #F3E5F5
+  BorderColor<<Социальные>> #7B1FA2
+  BackgroundColor<<Платформа>> #ECEFF1
+  BorderColor<<Платформа>> #455A64
+  BackgroundColor<<периметр>> #FFEBEE
+  BorderColor<<периметр>> #C62828
+  BackgroundColor<<данные>> #E8EAF6
+  BorderColor<<данные>> #3F51B5
+}
+
+skinparam component {
+  BackgroundColor<<периметр>> #FFEBEE
+  BorderColor<<периметр>> #C62828
+  BackgroundColor<<внешний>> #FFF9C4
+  BorderColor<<внешний>> #F9A825
+  BackgroundColor<<клиент>> #E0F7FA
+  BorderColor<<клиент>> #00838F
+}
+
+skinparam database {
+  BackgroundColor #EFEBE9
+  BorderColor #5D4037
+}
+
+skinparam node {
+  BackgroundColor<<данные>> #E8EAF6
+  BorderColor<<данные>> #3F51B5
+}
+
+' ============ АКТЁРЫ ============
+
+actor "Игрок" as player
+actor "Гость / зритель" as spectator
+actor "Создатель контента" as creator
+
+' ============ КЛИЕНТ И CDN ============
+
+node "Устройство пользователя\n(ПК / ноутбук / планшет)" as device <<клиент>> {
+  node "Браузер\n(современный Web)" as browser {
+    component "Веб-клиент\n(WASM/WebGL)" as web_client <<клиент>>
+  }
+}
+
+node "Интернет / CDN" as cdn_layer <<клиент>> {
+  component "CDN статики\nи игровых ассетов" as cdn_assets <<клиент>>
+}
+
+' ============ ВНЕШНИЕ СИСТЕМЫ ============
+
+node "Внешние системы" as external <<внешний>> {
+  component "Платёжные провайдеры\n(Stripe, PayPal и др.)" as payment_providers <<внешний>>
+  component "Внешний античит-сервис\n(например, EasyAntiCheat)" as external_anticheat <<внешний>>
+}
+
+' ============ ОБЛАЧНЫЙ РЕГИОН ============
+
+node "Облачный регион\n(EU-1)" as cloud {
+
+  ' ---- Публичный периметр ----
+  package "Публичный периметр" as edge <<периметр>> {
+    component "API-шлюз / WAF" as api_gateway <<периметр>>
+    component "Сервис аутентификации\n(auth)" as auth <<периметр>>
+  }
+
+  ' ---- Сервисный кластер ----
+  package "Сервисный кластер\n(приложения)" as app {
+
+    package "Игровой процесс" as pkg_rt <<Игровой процесс>> {
+      component "Сервис матчмейкинга\n(mm)" as mm
+      component "Сервис лобби\n(lob)" as lob
+      component "Оркестрация игровых серверов\n(gs-control)" as gs_ctl
+      component "Игровые серверы\n(authoritative)" as gss
+      component "Сервис чата / голоса\n(chat)" as chat
+    }
+
+    package "Монетизация" as pkg_com <<Монетизация>> {
+      component "Сервис каталога\n(catalog)" as catalog
+      component "Сервис заказов\n(orders)" as orders
+      component "Платёжный адаптер\n(payments)" as payments
+      component "Сервис инвентаря\n(inventory)" as inventory
+    }
+
+    package "UGC / Контент" as pkg_ugc <<UGC>> {
+      component "UGC API / редактор\n(ugc-api)" as ugc
+      component "Сервис модерации\n(moderation)" as moderation
+    }
+
+    package "Социальные функции" as pkg_soc <<Социальные>> {
+      component "Сервис турниров\n(tournaments)" as tournaments
+    }
+
+    package "Платформа (общесистемные сервисы)" as pkg_platform <<Платформа>> {
+      component "Сервис профилей\n(profiles)" as profiles
+      component "Конфиги / feature-флаги\n(config)" as config
+      component "Античит-адаптер\n(anticheat)" as anticheat
+      component "Наблюдаемость / метрики\n(observability)" as observability
+    }
+  }
+
+  ' ---- Слой данных ----
+  package "Слой данных" as data <<данные>> {
+    database "БД аккаунтов и профилей\n(PostgreSQL)" as db_accounts
+    database "БД игрового процесса\n(PostgreSQL)" as db_gameplay
+    database "БД монетизации\n(PostgreSQL)" as db_commerce
+    database "БД UGC-контента\n(DocumentDB)" as db_ugc
+    database "Хранилище телеметрии\n(Time-series / Column)" as db_metrics
+    component "Кэш / сессии\n(Redis)" as cache
+    component "Очередь сообщений\n(RabbitMQ / Kafka)" as message_queue
+  }
+}
+
+' ============ ВЗАИМОДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЕЙ ============
+
+player --> web_client   : Управление персонажем,\nигровой UI
+spectator --> web_client: Просмотр матчей,\nрежим зрителя
+creator --> web_client  : Создание / редактирование\nпользовательского контента
+
+' ============ ВЕБ-КЛИЕНТ ============
+
+web_client --> cdn_assets  : HTTPS\nзагрузка статики и ассетов
+web_client --> api_gateway : HTTPS/JSON\nREST / Web API-запросы
+web_client --> gss         : WebTransport/UDP\nигровой трафик (input/state)
+web_client --> chat        : WebSocket/WebRTC\nголосовой и текстовый чат
+
+' ============ API-ШЛЮЗ К СЕРВИСАМ ============
+
+api_gateway --> auth        : HTTP/gRPC\nвалидация токенов
+api_gateway --> mm          : HTTP/gRPC\nзапросы на поиск матчей
+api_gateway --> lob         : HTTP/gRPC\nуправление лобби
+api_gateway --> catalog     : HTTP/gRPC\nкаталог и витрина
+api_gateway --> orders      : HTTP/gRPC\nсоздание и просмотр заказов
+api_gateway --> payments    : HTTP/gRPC\nинициация платежей
+api_gateway --> inventory   : HTTP/gRPC\nчтение и обновление инвентаря
+api_gateway --> ugc         : HTTP/gRPC\nуправление UGC
+api_gateway --> tournaments : HTTP/gRPC\nуправление турнирами
+api_gateway --> profiles    : HTTP/gRPC\nчтение и обновление профилей
+api_gateway --> config      : HTTP/gRPC\nполучение конфигов / фиче-флагов
+
+' ============ АУТЕНТИФИКАЦИЯ И АВТОРИЗАЦИЯ (АГРЕГИРОВАНО) ============
+
+pkg_rt      ..> auth : gRPC / HTTP\nвалидация токенов\nruntime-сервисов
+pkg_com     ..> auth : gRPC / HTTP\nвалидация токенов\nмонетизации
+pkg_ugc     ..> auth : gRPC / HTTP\nвалидация токенов\nсоздателей контента
+pkg_soc     ..> auth : gRPC / HTTP\nвалидация токенов\nтурниров
+pkg_platform..> auth : gRPC / HTTP\nслужебные проверки
+
+' ============ ИГРОВОЙ ПРОЦЕСС (КЛЮЧЕВОЙ ПУТЬ) ============
+
+mm --> lob      : gRPC\nсоздание / обновление лобби
+lob --> gs_ctl  : gRPC\nзапрос на выделение\nигрового сервера
+gs_ctl --> gss  : Внутренний протокол\nзапуск инстанса матча
+
+chat --> pkg_rt : Логическая привязка\nк матчам / лобби
+
+' ============ МОНИТИЗАЦИЯ (КЛЮЧЕВЫЕ ВЗАИМОДЕЙСТВИЯ) ============
+
+catalog --> pkg_com         : Витрина и ассортимент
+orders  --> inventory       : gRPC\nобновление инвентаря\nпосле покупки
+payments --> payment_providers : HTTPS\nвнешняя обработка платежей
+payments --> orders         : gRPC\nобновление статуса заказа
+
+' ============ UGC / КОНТЕНТ (КЛЮЧЕВЫЕ ВЗАИМОДЕЙСТВИЯ) ============
+
+ugc --> moderation     : gRPC\nотправка на модерацию
+ugc --> cdn_assets     : HTTPS\nпубликация медиа-ассетов
+
+' ============ ТУРНИРЫ (КЛЮЧЕВЫЕ ВЗАИМОДЕЙСТВИЯ) ============
+
+tournaments --> mm        : gRPC\nсоздание турнирных матчей
+tournaments --> inventory : gRPC\nвыдача наград
+
+' ============ ПЛАТФОРМА: АНТИЧИТ, ПРОФИЛИ, КОНФИГИ ============
+
+pkg_rt --> anticheat               : События/телеметрия\nдля проверки
+anticheat --> external_anticheat   : HTTPS/API\nвнешняя проверка
+
+profiles --> db_accounts  : SQL\nпрофили игроков
+config   --> db_accounts  : SQL / key-value\nконфигурации / фичи
+
+' ============ ДОСТУП К ДАННЫМ (АГРЕГИРОВАНО) ============
+
+pkg_rt      --> db_gameplay : SQL\nматчи, лобби, турниры
+pkg_com     --> db_commerce : SQL\nзаказы, платежи, инвентарь
+pkg_ugc     --> db_ugc      : Документы UGC\nи статусы модерации
+pkg_soc     --> db_gameplay : SQL\nструктуры турниров
+pkg_platform--> db_accounts : SQL\nаккаунты, профили, конфиги
+
+' агрегированное использование Redis
+pkg_rt      --> cache : Redis\nкэш очередей, лобби, сессий
+pkg_com     --> cache : Redis\nкэш витрины и инвентаря
+pkg_ugc     --> cache : Redis\nкэш популярных UGC-объектов
+pkg_platform--> cache : Redis\nкэш токенов и feature-флагов
+
+' ============ НАБЛЮДАЕМОСТЬ И МЕТРИКИ (АГРЕГИРОВАНО) ============
+
+pkg_rt      ..> observability : Метрики runtime\n(поиск, матчи, чат)\n[async]
+pkg_com     ..> observability : Бизнес-метрики\nзаказов и платежей\n[async]
+pkg_ugc     ..> observability : Метрики использования UGC\n[async]
+pkg_soc     ..> observability : Метрики турниров\n[async]
+pkg_platform..> observability : Тех. метрики платформы\n[async]
+
+observability --> db_metrics     : Запись метрик и трейсинга\n[async]
+observability ..> message_queue  : События для фоновой\nаналитики / алёртов [async]
+
+' ============ АСИНХРОННАЯ ОБРАБОТКА (АГРЕГИРОВАНО) ============
+
+pkg_com     ..> message_queue  : События заказов и платежей\n[async]
+pkg_ugc     ..> message_queue  : События модерации UGC\n[async]
+pkg_platform..> message_queue  : Служебные события\n[async]
+
+' ============ ПРИМЕЧАНИЯ ============
+
+note top of app
+  Контейнерный уровень (C4):
+  каждый компонент — развернутый сервис
+  или приложение, а не отдельный класс.
+end note
+
+note right of data
+  Слой данных разделён по доменам:
+  - аккаунты и профили;
+  - игровой процесс;
+  - монетизация;
+  - UGC-контент;
+  - телеметрия.
+
+  Redis используется для:
+  - кэширования часто читаемых данных;
+  - хранения сессий и токенов;
+  - временных данных (очереди, лобби).
+end note
+
+note bottom of pkg_rt
+  Игровой процесс (runtime-контур):
+  критический путь mm --> lob --> gs_ctl --> gss,
+  жёсткие требования к задержкам.
+end note
+
+note bottom of pkg_com
+  Домены монетизации изолированы:
+  изменения в платежах и заказах
+  не влияют напрямую на игровой рантайм.
+end note
+
+note right of external
+  Внешние системы:
+  - платёжные провайдеры обрабатывают
+    реальные транзакции;
+  - античит-сервис выполняет
+    внешнюю валидацию поведения игроков.
+end note
+
+note bottom of message_queue
+  Очередь сообщений используется для:
+  - асинхронной обработки событий;
+  - интеграции между сервисами;
+  - буферизации нагрузки в пиках.
+end note
+
+' ============ ЛЕГЕНДА ============
+
+legend bottom
+  == Условные обозначения ==
+  -->   Синхронный запрос (HTTP, gRPC, WebSocket, SQL)
+  ..>   Асинхронные события, метрики, логирование
+endlegend
+
+@enduml

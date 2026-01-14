@@ -21,14 +21,14 @@ CallControl -> WebRTCGW : Create WebRTC session\n(SDP offer/answer)
 WebRTCGW -> MediaRec : Reserve media resources\n(возможно, включить запись)
 CallControl -> SIPGW : SIP INVITE (PSTN number)
 SIPGW -> Callee : SIP INVITE
-Callde --> SIPGW : SIP 180 Ringing / 200 OK
+Callee --> SIPGW : SIP 180 Ringing / 200 OK
 SIPGW --> CallControl : SIP 200 OK
 CallControl --> Client : Call established (via APIGW / signaling)
 Client -> WebRTCGW : WebRTC connect (DTLS/SRTP)
 WebRTCGW -> MediaRec : RTP/SRTP media
 
 ... После завершения разговора ...
-Callde -> SIPGW : BYE
+Callee -> SIPGW : BYE
 SIPGW -> CallControl : BYE
 CallControl -> WebRTCGW : Terminate session
 WebRTCGW -> MediaRec : Stop recording

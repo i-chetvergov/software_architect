@@ -1,0 +1,136 @@
+@startuml
+skinparam linetype ortho
+skinparam componentStyle rectangle
+skinparam PackageBorderColor #777
+skinparam PackageFontColor #222
+skinparam ArrowThickness 1
+skinparam shadowing false
+left to right direction
+title Функциональная декомпозиция по доменам (итоговая)
+
+' ==== ПАКЕТЫ ====
+package "Игровой процесс" as pkg_rt #LightSkyBlue {
+  [Подбор матчей] as mm
+  [Лобби] as lob
+  [Игровые серверы (сервер-авторитет)] as gs
+  [Пространственный чат (голос/текст)] as voip
+}
+
+package "Монетизация" as pkg_com #LightGoldenRodYellow {
+  [Витрина/Каталог] as cat
+  [Заказы] as ord
+  [Платёжный адаптер] as pay
+  [Инвентарь/Начисления] as inv
+}
+
+package "UGC / Контент" as pkg_ugc #LightGreen {
+  [Редактор/Загрузка] as ugc_edit
+  [Песочница/Проверки] as ugc_sandbox
+  [Модерация] as mod
+  [Публикация в CDN] as publish
+}
+
+package "Социальные функции" as pkg_soc #Thistle {
+  [Турниры/Сетка] as torn
+  [Приглашения/Доступ] as invite
+  [Зрители (призраки)] as spect
+}
+
+package "Платформа" as pkg_plat #AliceBlue {
+  [API-шлюз/WAF] as edge
+  [Идентификация и доступ] as auth
+  [Профили игроков] as profiles
+  [Конфиги/Фиче-флаги] as cfg
+  [Наблюдаемость/Телеметрия] as obs
+  [Античит/Сигналы] as ant
+  [CDN/Ассеты] as cdn
+}
+
+' ==== Инфраструктура ====
+queue "Шина событий (Kafka/Redpanda)" as bus
+queue "Шина конфигураций (pub/sub)" as cfg_bus
+database "Хранилище заказов/платежей" as db_billing
+database "Хранилище инвентаря" as db_inventory
+database "Хранилище UGC" as db_ugc
+database "Хранилище профилей" as db_profiles
+database "Телеметрия/логи" as db_logs
+
+' ==== Связи ====
+' Доступ/профили
+edge --> auth : OIDC [sync]
+auth --> profiles : REST/gRPC [sync]
+profiles --> db_profiles : SQL
+
+' Монетизация
+cat --> ord : REST [sync]
+ord --> pay : REST/Webhooks [sync]
+ord --> inv : REST/gRPC [sync]
+ord --> db_billing : SQL
+inv --> db_inventory : SQL
+ord ..> bus : OrderCreated [async]
+pay ..> bus : PaymentSucceeded/Failed [async]
+
+' UGC
+ugc_edit --> ugc_sandbox : REST [sync]
+ugc_sandbox --> mod : REST [sync]
+mod --> publish : REST [sync]
+publish --> cdn : API [sync]
+ugc_edit --> db_ugc : SQL
+mod ..> bus : ModerationVerdict [async]
+
+' Реал-тайм (критический путь подсвечен)
+mm -[#red,bold]-> lob : gRPC [sync]
+lob -[#red,bold]-> gs : gRPC [sync]
+voip --> gs : WebRTC [sync]
+spect --> gs : WSS/WebRTC [sync]
+gs ..> bus : MatchEvents [async]
+
+' Античит
+ant --> gs : сигналы/правила [sync]
+
+' Конфиги и наблюдаемость — по стрелке на пакет
+cfg --> cfg_bus : publish [async]
+cfg_bus ..> pkg_rt : subscribe [async]
+cfg_bus ..> pkg_com : subscribe [async]
+cfg_bus ..> pkg_ugc : subscribe [async]
+cfg_bus ..> pkg_soc : subscribe [async]
+cfg_bus ..> pkg_plat : subscribe [async]
+
+pkg_rt ..> obs : метрики/трейсы [async]
+pkg_com ..> obs : метрики [async]
+pkg_ugc ..> obs : метрики [async]
+pkg_soc ..> obs : метрики [async]
+pkg_plat ..> obs : метрики [async]
+obs --> db_logs : ingest
+
+' ==== Пояснения по доменам (кратко) ====
+note bottom of pkg_rt
+  Real-time контур. SLO: поиск матча P95 ≤ 10с;
+  тикрейт 30–60 Hz; критический путь: mm→lob→gs.
+end note
+
+note bottom of pkg_com
+  Платежи изолированы через адаптер; начисления по событию.
+end note
+
+note bottom of pkg_ugc
+  Загрузка → проверки → модерация → публикация в CDN.
+end note
+
+note bottom of pkg_soc
+  Турниры по приглашениям; зрители с задержкой (анти-ghosting).
+end note
+
+note bottom of pkg_plat
+  Общие сервисы: auth, профили, конфиги, античит, observability.
+end note
+
+' ==== Легенда ====
+legend right
+  [sync]  — синхронный вызов (REST/gRPC/WebRTC)
+  [async] — асинхронно (события/метрики)
+  queue   — шина pub/sub
+  database— доменное хранилище
+  Красные стрелки — критический путь (mm→lob→gs)
+endlegend
+@enduml

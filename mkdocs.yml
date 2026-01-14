@@ -80,6 +80,9 @@ plugins:
     - index.md
     - about.md
     - glossary.md
+    - "10_diagrams/*.md"
+    - "adr/*.md"
+    - "adl/*.md"
 
 extra:
   social:
@@ -120,6 +123,10 @@ nav:
   - ADR-004: adr/ADR-004.md
   - ADR-005: adr/ADR-005.md
   - ADR-006: adr/ADR-006.md
+  - ADR-007: adr/ADR-007.md
+  - ADR-008: adr/ADR-008.md
+  - ADR-009: adr/ADR-009.md
+  - ADR-010: adr/ADR-010.md
 
 extra_css:
 - stylesheets/extra.css
