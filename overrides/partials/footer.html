@@ -1,5 +1,32 @@
 {% import "partials/language.html" as lang with context %}
 
+{% if page.previous_page or page.next_page %}
+  <nav class="md-footer-nav" aria-label="{{ lang.t('footer.title') }}">
+    <div class="md-footer-nav__inner md-grid">
+      {% if page.previous_page %}
+        <a href="{{ page.previous_page.url | url }}" class="md-footer-nav__link md-footer-nav__link--prev" aria-label="{{ lang.t('footer.previous') }}">
+          <div class="md-footer-nav__direction">
+            {{ lang.t('footer.previous') }}
+          </div>
+          <div class="md-footer-nav__title">
+            {{ page.previous_page.title }}
+          </div>
+        </a>
+      {% endif %}
+      {% if page.next_page %}
+        <a href="{{ page.next_page.url | url }}" class="md-footer-nav__link md-footer-nav__link--next" aria-label="{{ lang.t('footer.next') }}">
+          <div class="md-footer-nav__direction">
+            {{ lang.t('footer.next') }}
+          </div>
+          <div class="md-footer-nav__title">
+            {{ page.next_page.title }}
+          </div>
+        </a>
+      {% endif %}
+    </div>
+  </nav>
+{% endif %}
+
 <footer class="md-footer">
   <div class="md-footer-meta md-typeset">
     <div class="md-footer-meta__inner md-grid" style="padding: 14px 0;">

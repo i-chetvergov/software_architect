@@ -1,0 +1,87 @@
+<svg width="1920" height="1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Градиенты для узлов сети -->
+    <radialGradient id="nodeGradient1" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#3F51B5;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#3F51B5;stop-opacity:0" />
+    </radialGradient>
+    <radialGradient id="nodeGradient2" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:0.35" />
+      <stop offset="100%" style="stop-color:#2196F3;stop-opacity:0" />
+    </radialGradient>
+    <radialGradient id="nodeGradient3" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#00BCD4;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#00BCD4;stop-opacity:0" />
+    </radialGradient>
+    
+    <!-- Градиент для линий соединений -->
+    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3F51B5;stop-opacity:0.15" />
+      <stop offset="50%" style="stop-color:#2196F3;stop-opacity:0.2" />
+      <stop offset="100%" style="stop-color:#00BCD4;stop-opacity:0.15" />
+    </linearGradient>
+    
+    <!-- Градиент для фона -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E3F2FD;stop-opacity:0.3" />
+      <stop offset="50%" style="stop-color:#BBDEFB;stop-opacity:0.2" />
+      <stop offset="100%" style="stop-color:#E1F5FE;stop-opacity:0.3" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Фоновый градиент -->
+  <rect width="100%" height="100%" fill="url(#bgGradient)" />
+  
+  <!-- Основные узлы сети (центральные точки связи) -->
+  <circle cx="200" cy="200" r="80" fill="url(#nodeGradient1)" />
+  <circle cx="1720" cy="300" r="100" fill="url(#nodeGradient2)" />
+  <circle cx="400" cy="800" r="90" fill="url(#nodeGradient3)" />
+  <circle cx="1500" cy="900" r="85" fill="url(#nodeGradient1)" />
+  <circle cx="960" cy="400" r="95" fill="url(#nodeGradient2)" />
+  <circle cx="1200" cy="600" r="75" fill="url(#nodeGradient3)" />
+  <circle cx="300" cy="500" r="70" fill="url(#nodeGradient2)" />
+  <circle cx="1600" cy="700" r="80" fill="url(#nodeGradient1)" />
+  
+  <!-- Малые узлы (периферийные устройства) -->
+  <circle cx="150" cy="150" r="25" fill="#3F51B5" opacity="0.25" />
+  <circle cx="1800" cy="250" r="30" fill="#2196F3" opacity="0.25" />
+  <circle cx="350" cy="750" r="28" fill="#00BCD4" opacity="0.25" />
+  <circle cx="1450" cy="850" r="27" fill="#3F51B5" opacity="0.25" />
+  <circle cx="900" cy="350" r="32" fill="#2196F3" opacity="0.25" />
+  <circle cx="1150" cy="550" r="26" fill="#00BCD4" opacity="0.25" />
+  <circle cx="250" cy="450" r="24" fill="#2196F3" opacity="0.25" />
+  <circle cx="1550" cy="650" r="29" fill="#3F51B5" opacity="0.25" />
+  <circle cx="600" cy="300" r="22" fill="#00BCD4" opacity="0.25" />
+  <circle cx="1300" cy="400" r="31" fill="#2196F3" opacity="0.25" />
+  <circle cx="800" cy="700" r="23" fill="#3F51B5" opacity="0.25" />
+  <circle cx="1100" cy="800" r="28" fill="#00BCD4" opacity="0.25" />
+  
+  <!-- Соединения между узлами (линии связи) -->
+  <line x1="200" y1="200" x2="960" y2="400" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
+  <line x1="1720" y1="300" x2="960" y2="400" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
+  <line x1="400" y1="800" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
+  <line x1="1500" y1="900" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
+  <line x1="960" y1="400" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
+  <line x1="300" y1="500" x2="960" y2="400" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
+  <line x1="1600" y1="700" x2="1200" y2="600" stroke="url(#lineGradient)" stroke-width="2" opacity="0.3" />
+  <line x1="200" y1="200" x2="300" y2="500" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
+  <line x1="1720" y1="300" x2="1600" y2="700" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
+  <line x1="400" y1="800" x2="300" y2="500" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
+  <line x1="1500" y1="900" x2="1600" y2="700" stroke="url(#lineGradient)" stroke-width="2" opacity="0.25" />
+  
+  <!-- Дополнительные соединения для более сложной сети -->
+  <line x1="200" y1="200" x2="400" y2="800" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
+  <line x1="1720" y1="300" x2="1500" y2="900" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
+  <line x1="300" y1="500" x2="400" y2="800" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
+  <line x1="1600" y1="700" x2="1500" y2="900" stroke="url(#lineGradient)" stroke-width="1.5" opacity="0.2" />
+  
+  <!-- Волновые паттерны (символизируют сигналы связи) -->
+  <path d="M 100 200 Q 150 180, 200 200 T 300 200" stroke="#2196F3" stroke-width="1.5" fill="none" opacity="0.15" />
+  <path d="M 1620 300 Q 1670 280, 1720 300 T 1820 300" stroke="#3F51B5" stroke-width="1.5" fill="none" opacity="0.15" />
+  <path d="M 300 800 Q 350 780, 400 800 T 500 800" stroke="#00BCD4" stroke-width="1.5" fill="none" opacity="0.15" />
+  
+  <!-- Центральный узел (hub) - символизирует UC-платформу -->
+  <circle cx="960" cy="400" r="8" fill="#3F51B5" opacity="0.6" />
+  <circle cx="960" cy="400" r="15" fill="#2196F3" opacity="0.3" />
+  <circle cx="960" cy="400" r="25" fill="#00BCD4" opacity="0.15" />
+</svg>
