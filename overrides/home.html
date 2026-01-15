@@ -4,29 +4,42 @@
 <style>
   .hero {
     margin: 0 0 48px;
-    padding: 0;
+    padding: 56px 40px;
     border-radius: 20px;
-    border: none;
+    border: 1px solid var(--md-default-fg-color--lightest);
     position: relative;
     overflow: hidden;
-    background: url('assets/images/telecom-bg.svg') center/cover no-repeat;
+    background: var(--md-default-bg-color);
     box-shadow: 
       0 12px 32px rgba(0,0,0,.08),
       0 0 0 1px rgba(255,255,255,.05) inset;
-    min-height: 600px;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: flex-start;
+    text-align: center;
     transition: transform 0.3s ease, box-shadow 0.3s ease;
   }
 
   .hero__title {
-    display: none;
+    font-size: clamp(2.2rem, 4vw, 3.2rem);
+    font-weight: 800;
+    line-height: 1.15;
+    margin: 0 0 20px;
+    letter-spacing: -.03em;
+    position: relative;
+    z-index: 1;
+    color: var(--md-default-fg-color);
   }
 
   .hero__subtitle {
-    display: none;
+    font-size: 1.15rem;
+    line-height: 1.7;
+    margin: 0;
+    color: var(--md-default-fg-color);
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+    z-index: 1;
+    font-weight: 400;
+    opacity: 0.85;
   }
 
   .hero-actions {
@@ -190,10 +203,8 @@
   /* Адаптивность для мобильных устройств */
   @media (max-width: 768px) {
     .hero {
-      padding: 0;
-      background-size: cover;
+      padding: 40px 28px;
       border-radius: 16px;
-      min-height: 400px;
     }
     .section-card {
       padding: 20px 24px;
@@ -215,7 +226,7 @@
   
   /* Для тёмной темы - улучшенная адаптация */
   [data-md-color-scheme="slate"] .hero {
-    background: url('assets/images/telecom-bg.svg') center/cover no-repeat;
+    background: var(--md-default-bg-color);
     box-shadow: 
       0 12px 32px rgba(0,0,0,.2),
       0 0 0 1px rgba(255,255,255,.03) inset;
