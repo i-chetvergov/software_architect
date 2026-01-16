@@ -110,7 +110,17 @@ nav:
 
 - Требования и сценарии:
   - Требования: 06_requirements/index.md
-  - Пользовательские сценарии: 07_use_cases/index.md
+  - Пользовательские сценарии:
+    - Обзор: 07_use_cases/index.md
+    - UC-01. Исходящий голосовой вызов: 07_use_cases/uc-01.md
+    - UC-02. Входящий вызов с маршрутизацией: 07_use_cases/uc-02.md
+    - UC-03. Чат между сотрудниками: 07_use_cases/uc-03.md
+    - UC-04. Видеоконференция: 07_use_cases/uc-04.md
+    - UC-05. Интеграция с CRM: 07_use_cases/uc-05.md
+    - UC-06. Provisioning: 07_use_cases/uc-06.md
+    - UC-07. Аутентификация: 07_use_cases/uc-07.md
+    - UC-08. Доступ к записи: 07_use_cases/uc-08.md
+    - UC-09. Управление несколькими устройствами: 07_use_cases/uc-09.md
 
 - Атрибуты качества: 08_quality_scenarios/index.md
 
