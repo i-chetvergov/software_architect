@@ -1,0 +1,174 @@
+@startuml uc-02
+title UC-02. Входящий вызов с маршрутизацией по очереди/группе
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Внешний пользователь" as Caller
+participant "PSTN/SIP-транк" as PSTN
+participant "SIP Gateway / SBC" as SIPEdge
+participant "Call Control Service" as CallControl
+participant "Presence Service" as Presence
+participant "UC-клиенты операторов" as AgentClient
+participant "API Gateway" as APIGW
+participant "Media / Recording Service" as MediaRec
+participant "Billing / CDR Service" as Billing
+participant "Observability Stack" as Obs
+
+== Поступление входящего вызова ==
+Caller -> PSTN : Набирает номер компании
+PSTN -> SIPEdge : SIP INVITE\n(входящий DID/номер)
+activate SIPEdge
+
+SIPEdge -> SIPEdge : Применение политик безопасности\n(ACL, rate limit, topology hiding)
+
+SIPEdge -> CallControl : Сигнализация вызова\n(внутренний интерфейс/шина)
+activate CallControl
+
+== Обработка и маршрутизация ==
+CallControl -> CallControl : Нормализация адреса назначения\nСопоставление номера с маршрутом\nСоздание сессии: call_id, correlation_id
+
+CallControl -> Presence : Запрос кандидатов для обработки\n(учёт статусов, расписаний, ограничений)
+activate Presence
+
+Presence -> Presence : Определение доступных операторов\n(статусы: available/busy/away)
+Presence --> CallControl : Список кандидатов\n(operator_id, status, skills)
+
+CallControl -> CallControl : Применение алгоритма распределения\n(ring-all, round-robin, longest idle, skills-based)
+
+== Оповещение операторов ==
+CallControl -> AgentClient : Уведомления через сигнальный канал\n(push/WebSocket) [параллельно для всех]
+activate AgentClient
+CallControl -> AgentClient : Инициация вызовов на устройства\n(в зависимости от модели) [параллельно]
+
+alt Первый оператор отвечает
+    AgentClient -> APIGW : Accept call (access token)\n[correlation_id]
+    APIGW -> CallControl : Оператор принял вызов
+    
+    CallControl -> CallControl : Прекращение оповещения остальных\nСинхронизация состояния
+    
+    CallControl -> SIPEdge : SIP 200 OK (для Caller)
+    SIPEdge -> PSTN : SIP 200 OK
+    PSTN --> Caller : Соединение установлено
+    
+    == Медиаканал ==
+    CallControl -> MediaRec : Подключение к медиаканалу\n(согласно политике)
+    activate MediaRec
+    
+    opt Запись включена
+        MediaRec -> MediaRec : Включение записи\nСвязь с call_id
+    end
+    
+    MediaRec -> AgentClient : Медиапоток RTP/SRTP
+    SIPEdge -> PSTN : Медиапоток RTP/SRTP
+    
+    == Разговор ==
+    loop Голосовой поток
+        Caller -> PSTN : Аудиопоток
+        PSTN -> SIPEdge : Медиапоток
+        SIPEdge -> MediaRec : Медиапоток
+        MediaRec --> AgentClient : Аудиопоток
+    end
+    
+    CallControl -> Obs : События состояния вызова\n(call_id, correlation_id)
+    
+    == Завершение ==
+    opt Завершение вызова
+        Caller -> PSTN : Завершает вызов
+        PSTN -> SIPEdge : SIP BYE
+        SIPEdge -> CallControl : BYE
+        
+        CallControl -> AgentClient : Завершение вызова
+        CallControl -> MediaRec : Остановка медиапотока
+        MediaRec -> MediaRec : Финализация записи (если включена)
+        
+        CallControl -> Billing : CallEnded (CDR + статистика очереди)\n(call_id, correlation_id,\nвремя ожидания, количество попыток,\nпричина завершения) [async]
+        activate Billing
+        Billing -> Billing : Сохранение CDR и статистики
+        deactivate Billing
+        
+        CallControl -> Obs : Событие CallEnded\n(call_id, correlation_id)
+        deactivate CallControl
+        deactivate MediaRec
+        deactivate AgentClient
+        deactivate SIPEdge
+        deactivate Presence
+    end
+
+else Нет доступных операторов
+    CallControl -> CallControl : Вызов переходит в очередь ожидания
+    CallControl -> MediaRec : Воспроизведение удерживающей музыки\nили сообщения
+    
+    loop Ожидание доступного оператора
+        CallControl -> Presence : Проверка появления доступных
+        Presence --> CallControl : Статусы операторов
+        
+        alt Доступен оператор
+            CallControl -> AgentClient : Оповещение оператора
+            AgentClient -> CallControl : Accept
+            ... (продолжение как выше) ...
+        else Таймаут ожидания
+            CallControl -> CallControl : Перенаправление на резервный маршрут\n(другая группа/голосовая почта/дежурный)
+        end
+    end
+    deactivate CallControl
+    deactivate Presence
+    deactivate SIPEdge
+end
+
+alt Таймаут ответа оператора
+    CallControl -> CallControl : Завершение попытки\nПереход к следующему кандидату
+    CallControl -> Obs : Статистика попыток\n(call_id, correlation_id, таймауты)
+    deactivate CallControl
+    note right: Фиксируется статистика попыток
+end
+
+alt Отказ/занято оператора
+    AgentClient -> CallControl : Reject / Busy
+    CallControl -> CallControl : Исключение кандидата на текущую попытку
+    CallControl -> Presence : Обновление статуса\nУчёт результата попытки
+    CallControl -> CallControl : Переход к следующему кандидату
+    deactivate AgentClient
+end
+
+alt Сбой медиаканала
+    MediaRec --> CallControl : Ошибка медиаканала\n(причина)
+    opt Деградация по политике
+        CallControl -> CallControl : Режим деградации\n(без записи, но соединение сохраняется)
+        CallControl -> Obs : Техническое событие\n(причина деградации)
+    else Невозможна деградация
+        CallControl --> AgentClient : Ошибка соединения
+        CallControl -> Obs : Событие CallFailed\n(причина, correlation_id)
+    end
+end
+
+== Общая наблюдаемость ==
+CallControl -> Obs : Метрики очереди\n(call_id, correlation_id,\nвремя ожидания, попытки)
+Presence -> Obs : Статусы операторов\nи статистика распределения
+
+note over Caller,Billing
+    Все запросы содержат correlation_id.
+    call_id привязывается к operator_id, device_id.
+    CDR содержит статистику очереди.
+    Запись связывается с call_id через метаданные.
+    Наблюдаемость: SBC -> Call Control -> клиенты -> Media/Recording -> CDR.
+end note
+
+@enduml

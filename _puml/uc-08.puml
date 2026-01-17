@@ -1,0 +1,189 @@
+@startuml uc-08
+title UC-08. Доступ к записи разговора с контролем прав и аудитом
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Пользователь/руководитель\n/ИБ-специалист" as User
+participant "UC-клиент\n/Admin UI" as Client
+participant "API Gateway" as APIGW
+participant "IAM Service" as IAM
+participant "Media / Recording Service" as MediaRec
+participant "Object Storage" as ObjectStorage
+participant "Audit Logging" as Audit
+participant "Observability Stack" as Obs
+
+== Поиск записей ==
+User -> Client : Запрашивает список/поиск записей\n(период, участник, call_id,\nrecording_id)
+activate User
+activate Client
+
+Client -> APIGW : Search recordings\n(access token, search criteria:\nпериод, участник, call_id,\nrecording_id)
+activate APIGW
+
+== Валидация токена и проверка прав ==
+APIGW -> IAM : Валидация токена\n[correlation_id]
+activate IAM
+
+IAM -> IAM : Проверка прав доступа к записям\n(RBAC/ABAC: роли, подразделения,\nвременные ограничения)
+
+IAM -> APIGW : OK (user, scopes,\nправа на просмотр записей)
+deactivate IAM
+
+APIGW -> MediaRec : Поиск записей\n(поисковые критерии, права доступа)
+activate MediaRec
+
+MediaRec -> MediaRec : Выполнение поиска\nс учётом прав доступа\n(фильтрация по правам:\nроли, подразделения)
+
+MediaRec --> APIGW : Метаданные записей\n(ID, время, участники, длительность,\ncall_id, recording_id)\n[только для разрешённых записей]
+deactivate MediaRec
+
+APIGW --> Client : Список записей\n(метаданные)
+deactivate APIGW
+
+Client --> User : Отображение списка записей
+deactivate Client
+
+== Запрос доступа к записи ==
+User -> Client : Выбирает запись из списка\nЗапрашивает воспроизведение/скачивание
+activate Client
+
+Client -> APIGW : Get recording access\n(access token, recording_id,\nтип операции: playback/download)
+activate APIGW
+
+== Повторная проверка прав ==
+APIGW -> IAM : Повторная проверка прав\n(для операций воспроизведения/скачивания)\n[correlation_id]
+activate IAM
+
+IAM -> IAM : Проверка прав на конкретную запись\n(RBAC/ABAC: роли, подразделения,\nвременные ограничения,\nправа на операцию)
+
+alt Доступ разрешён
+    IAM -> APIGW : OK (user, scopes,\nправа подтверждены)
+    deactivate IAM
+    
+    APIGW -> MediaRec : Запрос доступа к записи\n(recording_id, тип операции,\nuser_id, correlation_id)
+    activate MediaRec
+    
+    MediaRec -> MediaRec : Проверка существования записи\nПрименение политики безопасности
+    
+    MediaRec -> ObjectStorage : Формирование временной ссылки\n/токена доступа\n(TTL, ограничения по политике\nбезопасности)
+    activate ObjectStorage
+    
+    ObjectStorage -> ObjectStorage : Генерация временной ссылки\n/токена доступа (TTL ограничен,\nполитика безопасности применена)
+    
+    ObjectStorage --> MediaRec : Временная ссылка/токен доступа\n(TTL, ограничения)
+    deactivate ObjectStorage
+    
+    MediaRec --> APIGW : Временная ссылка/токен доступа\n(recording_id, TTL)
+    deactivate MediaRec
+    
+    APIGW --> Client : Временная ссылка/токен доступа\n(recording_id, TTL)
+    deactivate APIGW
+    
+    Client -> ObjectStorage : Доступ к записи\n(временная ссылка/токен)
+    activate ObjectStorage
+    
+    ObjectStorage -> ObjectStorage : Валидация токена/ссылки\nПроверка TTL и ограничений
+    
+    ObjectStorage --> Client : Поток записи\n(воспроизведение) или файл\n(скачивание)
+    
+    Client --> User : Воспроизведение записи\nили скачивание файла
+    deactivate ObjectStorage
+    deactivate Client
+    
+    == Фиксация доступа в аудите ==
+    MediaRec -> Audit : Факт доступа к записи\n(recording_id, user_id,\ncall_id если есть,\ncorrelation_id,\nтип операции,\nвремя доступа) [async]
+    activate Audit
+    
+    Audit -> Audit : Фиксация в Audit Logging\n(кто, когда, какая запись,\nтип операции)\n[полная трассируемость]
+    deactivate Audit
+    
+    MediaRec -> Obs : Событие доступа к записи\n(recording_id, user_id,\ncorrelation_id, тип операции)
+    activate Obs
+    Obs -> Obs : Регистрация событий доступа
+    deactivate Obs
+    
+    deactivate MediaRec
+    deactivate User
+
+else Доступ запрещён
+    IAM -> APIGW : Ошибка: Доступ запрещён\n(403 Forbidden, причина)
+    deactivate IAM
+    
+    APIGW --> Client : Ошибка: Доступ запрещён\n(причина)
+    deactivate APIGW
+    
+    Client --> User : Уведомление о запрете доступа\n(доступ запрещён)
+    deactivate Client
+    
+    == Фиксация попытки доступа ==
+    IAM -> Audit : Попытка доступа запрещена\n(recording_id, user_id,\ncorrelation_id,\nтип операции, время,\nпричина отказа) [async]
+    activate Audit
+    Audit -> Audit : Фиксация попытки доступа\nв Audit Logging
+    deactivate Audit
+    
+    IAM -> Obs : Событие отказа в доступе\n(recording_id, user_id,\ncorrelation_id, причина)
+    activate Obs
+    Obs -> Obs : Регистрация попыток доступа
+    deactivate Obs
+    
+    deactivate IAM
+    deactivate User
+    note right: Попытка фиксируется в Audit Logging
+end
+
+== Альтернативный сценарий: запись удалена ==
+alt Запись удалена по retention
+    MediaRec -> MediaRec : Проверка существования записи\n(recording_id)
+    
+    MediaRec -> MediaRec : Запись удалена/архивирована\nпо политике retention (NFR-09)
+    
+    MediaRec --> APIGW : Ошибка: Запись не найдена\n(удалена по политике retention)
+    deactivate MediaRec
+    
+    APIGW --> Client : Ошибка: Запись удалена\nпо политике хранения
+    deactivate APIGW
+    
+    Client --> User : Уведомление: Запись удалена\nпо политике хранения
+    deactivate Client
+    
+    MediaRec -> Obs : Событие: Запись удалена\n(recording_id, причина: retention,\ncorrelation_id)
+    activate Obs
+    Obs -> Obs : Фиксация для наблюдаемости
+    deactivate Obs
+    deactivate User
+    note right: Событие фиксируется в наблюдаемости
+end
+
+== Общая наблюдаемость ==
+Audit -> Obs : Метрики аудита доступа\n(recording_id, user_id,\ncorrelation_id, типы операций)
+MediaRec -> Obs : Метрики запросов записей\n(количество, успешность,\nвремя ответа)
+
+note over User,Obs
+    Все запросы содержат correlation_id.
+    recording_id, user_id привязываются к операциям доступа.
+    call_id связывается с recording_id если доступен.
+    Операции доступа зафиксированы в Audit Logging\nс полной трассируемостью (кто, когда, какая запись, тип операции).
+    События доступны в наблюдаемости для мониторинга и расследования.
+end note
+
+deactivate Obs
+
+@enduml

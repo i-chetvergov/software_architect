@@ -1,0 +1,185 @@
+@startuml uc-01
+title UC-01. Исходящий голосовой вызов из веб-клиента (WebRTC -> SIP/PSTN)
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Корпоративный пользователь" as User
+participant "UC WebRTC-клиент" as Client
+participant "API Gateway" as APIGW
+participant "IAM Service" as IAM
+participant "Call Control Service" as CallControl
+participant "WebRTC Gateway" as WebRTCGW
+participant "Media / Recording Service" as MediaRec
+participant "SIP Gateway / SBC" as SIPEdge
+participant "PSTN/внешний пользователь" as Callee
+participant "Billing / CDR Service" as Billing
+participant "Observability Stack" as Obs
+
+== Инициация вызова ==
+User -> Client : Нажимает «Позвонить»\nпо контакту/номеру
+activate Client
+
+Client -> APIGW : createCall (access token, target)\n[correlation_id]
+activate APIGW
+
+APIGW -> IAM : Валидация токена\n[correlation_id]
+activate IAM
+IAM -> APIGW : OK (user, scopes, policies)\nПроверка rate limit, tenant isolation
+deactivate IAM
+
+APIGW -> CallControl : Создание вызова\n(user, target, correlation_id)
+activate CallControl
+
+== Обработка вызова ==
+CallControl -> CallControl : Проверка прав и политик\nПрименение маршрутизации/нормализации
+CallControl -> CallControl : Создание call/session\ncall_id, session_id, correlation_id
+
+CallControl -> WebRTCGW : Подготовка WebRTC-сессии\nSDP offer/answer
+activate WebRTCGW
+
+WebRTCGW -> MediaRec : Резервирование ресурсов\n(ICE/DTLS-SRTP)
+activate MediaRec
+
+opt Запись включена по политике
+    MediaRec -> MediaRec : Включение записи\nСвязь с call_id
+end
+
+WebRTCGW --> CallControl : WebRTC параметры готовы
+
+== Установление соединения ==
+CallControl -> SIPEdge : SIP INVITE\n(PSTN/оператор или внутренний SIP)
+activate SIPEdge
+SIPEdge -> SIPEdge : Применение политик\n(topology hiding, NAT traversal)
+
+SIPEdge -> Callee : SIP INVITE
+activate Callee
+
+alt Целевой абонент доступен
+    Callee --> SIPEdge : SIP 200 OK
+    SIPEdge --> CallControl : SIP 200 OK
+    
+    CallControl --> Client : Вызов установлен\n(call_id, session_id, correlation_id)
+    CallControl -> Obs : Событие CallAnswered\n(call_id, correlation_id)
+    
+    Client -> WebRTCGW : WebRTC connect\n(DTLS-SRTP)
+    WebRTCGW -> MediaRec : Медиапоток RTP/SRTP
+    
+    == Во время разговора ==
+    loop Голосовой поток
+        Client -> MediaRec : Аудиопоток
+        MediaRec --> Client : Эхо/обратная связь
+    end
+    
+    CallControl -> Obs : События состояния\n(ringing/answered/hold/ended)\n[correlation_id]
+    
+else Целевой абонент недоступен
+    Callee --> SIPEdge : SIP 486 Busy\nили SIP 408 Timeout
+    SIPEdge --> CallControl : SIP код причины
+    
+    CallControl --> Client : Статус недоступности\n(busy/unreachable/timeout)
+    CallControl -> Obs : Событие CallFailed\n(call_id, correlation_id, причина)
+    deactivate Callee
+    deactivate SIPEdge
+    deactivate CallControl
+    deactivate WebRTCGW
+    deactivate MediaRec
+    deactivate APIGW
+    deactivate Client
+    note right: CDR фиксирует причину завершения
+end
+
+== Завершение вызова ==
+opt Вызов успешно завершён
+    User -> Client : Завершает вызов
+    Client -> CallControl : BYE / Terminate call
+    
+    CallControl -> WebRTCGW : Завершение WebRTC-сессии
+    WebRTCGW -> MediaRec : Остановка медиапотока
+    MediaRec -> MediaRec : Финализация записи\n(если включена)
+    
+    CallControl -> SIPEdge : SIP BYE
+    SIPEdge -> Callee : SIP BYE
+    Callee --> SIPEdge : SIP 200 OK
+    SIPEdge --> CallControl : SIP 200 OK
+    
+    CallControl -> Billing : CallEnded (CDR data)\n(call_id, user_id, device_id,\ncorrelation_id, длительность) [async]
+    activate Billing
+    Billing -> Billing : Сохранение CDR\nСвязь с записью (если есть)
+    deactivate Billing
+    
+    CallControl -> Obs : Событие CallEnded\n(call_id, correlation_id)
+    deactivate CallControl
+    deactivate WebRTCGW
+    deactivate MediaRec
+    deactivate SIPEdge
+    deactivate Callee
+end
+
+== Альтернативные сценарии ==
+alt Запрещён исходящий вызов
+    CallControl -> CallControl : Проверка политик\n(класс обслуживания, направление)
+    CallControl --> Client : Ошибка: Вызов запрещён\n(причина)
+    CallControl -> Obs : Событие CallRejected\n(call_id, correlation_id, причина)
+    deactivate CallControl
+    deactivate APIGW
+    deactivate Client
+    note right: Событие отказа и аудит
+end
+
+alt Перегрузка ресурсов
+    MediaRec --> WebRTCGW : Ошибка: Ресурсы недоступны
+    WebRTCGW --> CallControl : Ошибка перегрузки
+    CallControl --> Client : Ошибка: Сервис перегружен
+    CallControl -> Obs : Техническое событие\nдля наблюдаемости и SLO
+    deactivate CallControl
+    deactivate WebRTCGW
+    deactivate MediaRec
+    deactivate APIGW
+    deactivate Client
+end
+
+alt Сбой на границе (SIP Gateway / SBC)
+    SIPEdge --> CallControl : Ошибка соединения\n(причина отказа)
+    CallControl -> CallControl : Правила повторной попытки\n/резервный маршрут (по политике)
+    opt Резервный маршрут доступен
+        CallControl -> SIPEdge : Повторная попытка\nчерез резервный маршрут
+    else Резервный маршрут недоступен
+        CallControl --> Client : Ошибка: Не удалось установить соединение
+        CallControl -> Obs : Событие CallFailed\n(причина, correlation_id)
+    end
+    deactivate CallControl
+    deactivate SIPEdge
+    deactivate APIGW
+    deactivate Client
+end
+
+== Общая наблюдаемость ==
+CallControl -> Obs : Метрики вызова\n(call_id, correlation_id,\nвремя установления, длительность)
+MediaRec -> Obs : Метрики медиа\n(RTT, потери пакетов)
+
+note over Client,Billing
+    Все запросы содержат correlation_id.
+    call_id, session_id привязываются к user_id, device_id.
+    CDR содержит полный контекст вызова.
+    Запись связывается с call_id через метаданные.
+end note
+
+@enduml

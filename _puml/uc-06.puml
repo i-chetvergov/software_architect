@@ -1,0 +1,162 @@
+@startuml uc-06
+title UC-06. Provisioning: управление пользователями/номерами/политиками/маршрутизацией
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Администратор" as Admin
+participant "Admin UI/Admin API" as AdminUI
+participant "API Gateway" as APIGW
+participant "IAM Service" as IAM
+participant "Provisioning Service" as Provisioning
+participant "Call Control Service" as CallControl
+participant "Billing / CDR Service" as Billing
+participant "Audit Logging" as Audit
+participant "Observability Stack" as Obs
+
+== Создание пользователя ==
+Admin -> AdminUI : Создаёт пользователя\n(имя, email, телефон, роли)
+activate Admin
+activate AdminUI
+
+AdminUI -> APIGW : Create user\n(административный токен,\nuser data, roles, policies)
+activate APIGW
+
+== Валидация прав администратора ==
+APIGW -> IAM : Валидация токена\n[correlation_id]
+activate IAM
+
+IAM -> IAM : Проверка прав администратора\n(RBAC/ABAC)
+
+IAM -> APIGW : OK (admin_user, admin_scopes,\nправа на provisioning)
+deactivate IAM
+
+APIGW -> Provisioning : Создание пользователя\n(admin_user, user_data,\nroles, groups, correlation_id)
+activate Provisioning
+
+== Процесс создания пользователя ==
+Provisioning -> Provisioning : Создание профиля пользователя\nНазначение ролей/групп\nПрисвоение: user_id, correlation_id
+
+Provisioning -> IAM : Синхронизация пользователя\nс IAM/каталогом\n(или связь с IdP-учётной записью)
+activate IAM
+IAM -> IAM : Создание учётной записи\nв каталоге/IdP
+IAM --> Provisioning : OK (user_id, sync_status)
+deactivate IAM
+
+Provisioning -> CallControl : Назначение номера/плана набора\n/правил маршрутизации\n(user_id, phone_number, routing_rules)
+activate CallControl
+CallControl -> CallControl : Настройка маршрутизации\nСвязь номера с user_id
+CallControl --> Provisioning : OK (phone_number, routing_rules)
+deactivate CallControl
+
+== Применение политик хранения ==
+Provisioning -> Billing : Применение политик хранения\n(CDR/записи/сообщения)\nПараметры экспорта CDR\n(user_id, retention_policies)
+activate Billing
+Billing -> Billing : Настройка политик хранения\nдля пользователя
+Billing --> Provisioning : OK (retention_policies)
+deactivate Billing
+
+== Версионирование конфигурации ==
+Provisioning -> Provisioning : Фиксация версии конфигурации\nСохранение изменений\nс возможностью отката
+
+Provisioning -> Audit : Факт изменения конфигурации\n(user_id администратора,\ntarget_user_id,\ncorrelation_id,\nтип операции: create_user,\nметаданные изменений) [async]
+activate Audit
+
+Audit -> Audit : Фиксация в Audit Logging\n(кто, когда, что изменил,\nцелевой пользователь)
+deactivate Audit
+
+Provisioning -> Obs : События администрирования\n(user_id, correlation_id,\nтип операции, результат)\n[для мониторинга и аналитики]
+activate Obs
+Obs -> Obs : Регистрация событий\nадминистрирования
+deactivate Obs
+
+Provisioning --> AdminUI : Пользователь создан\n(user_id, phone_number,\nверсия конфигурации)
+deactivate Provisioning
+deactivate APIGW
+
+AdminUI --> Admin : Подтверждение создания\nпользователя
+deactivate AdminUI
+deactivate Admin
+
+== Альтернативные сценарии ==
+alt Конфликт конфигурации
+    Provisioning -> Provisioning : Проверка конфликтов\n(дублирование номера,\nконфликт политик)
+    
+    alt Конфликт обнаружен
+        Provisioning -> Provisioning : Обнаружен конфликт\n(причина: дублирование номера\nили конфликт политик)
+        
+        Provisioning --> AdminUI : Ошибка: Конфликт конфигурации\n(причина конфликта)
+        AdminUI --> Admin : Уведомление о конфликте\n(причина)
+        
+        Provisioning -> Audit : Событие конфликта\n(user_id, correlation_id,\nтип конфликта, причина)
+        Audit -> Audit : Фиксация в аудите
+        note right: Событие фиксируется в аудите
+        
+        deactivate Provisioning
+        deactivate APIGW
+        deactivate AdminUI
+        deactivate Admin
+    end
+end
+
+alt Откат изменений конфигурации
+    Admin -> AdminUI : Инициирует откат конфигурации\n(выбор версии для отката)
+    activate Admin
+    activate AdminUI
+    
+    AdminUI -> APIGW : Rollback configuration\n(version_id, correlation_id)
+    APIGW -> Provisioning : Откат конфигурации\n(version_id, correlation_id)
+    activate Provisioning
+    
+    Provisioning -> Provisioning : Восстановление предыдущей версии\nконфигурации
+    
+    Provisioning -> IAM : Откат изменений в IAM/каталоге\n(если требуется)
+    Provisioning -> CallControl : Откат изменений маршрутизации\n(если требуется)
+    Provisioning -> Billing : Откат политик хранения\n(если требуется)
+    
+    Provisioning -> Audit : Факт отката\n(user_id администратора,\nversion_id, correlation_id,\nтип операции: rollback)
+    Audit -> Audit : Фиксация факта отката
+    deactivate Audit
+    
+    Provisioning --> AdminUI : Конфигурация откачена\n(version_id)
+    deactivate Provisioning
+    deactivate APIGW
+    
+    AdminUI --> Admin : Подтверждение отката
+    deactivate AdminUI
+    deactivate Admin
+    note right: Факт отката фиксируется в аудите
+end
+
+== Общая наблюдаемость ==
+Provisioning -> Obs : Метрики provisioning\n(user_id, correlation_id,\nтип операции, результат)
+Audit -> Obs : Метрики аудита\n(администрирование,\nтипы операций, частота)
+
+note over Admin,Billing
+    Все запросы содержат correlation_id.
+    user_id администратора и target_user_id привязываются к операциям.
+    Версии конфигурации сохраняются с возможностью отката.
+    Все изменения фиксируются в Audit Logging с полной трассируемостью.
+    События администрирования доступны для мониторинга и аналитики.
+end note
+
+deactivate Obs
+
+@enduml

@@ -1,0 +1,166 @@
+@startuml uc-05
+title UC-05. Интеграция с CRM: click-to-call + карточка клиента + логирование
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Оператор\nконтакт-центра" as Operator
+participant "CRM" as CRM
+participant "UC-клиент оператора" as Client
+participant "API Gateway" as APIGW
+participant "IAM Service" as IAM
+participant "Call Control Service" as CallControl
+participant "Billing / CDR Service" as Billing
+participant "Event Bus/Webhooks" as EventBus
+participant "Observability Stack" as Obs
+participant "Audit Logging" as Audit
+
+== Инициация click-to-call из CRM ==
+Operator -> CRM : Открывает карточку клиента
+Operator -> CRM : Нажимает «Позвонить»\n(click-to-call)
+
+CRM -> CRM : Определение номера клиента\nи контекста (ID клиента в CRM,\nID оператора)
+
+CRM -> APIGW : Внешний API UC-платформы\n(API ключ/OAuth, integration_id,\nclient_id, operator_id, target_number)
+activate CRM
+activate APIGW
+
+== Валидация и установление вызова ==
+APIGW -> IAM : Валидация интеграционных ключей\n(API ключ/OAuth, проверка прав/скоупов)
+activate IAM
+
+IAM -> APIGW : OK (integration_id, scopes,\nintegration context)
+deactivate IAM
+
+APIGW -> CallControl : Создание вызова\n(integration_id, correlation_id,\noperator_id, target_number)
+activate CallControl
+
+CallControl -> CallControl : Создание call/session\ncall_id, user_id, correlation_id\nСвязь с integration_id
+
+CallControl -> CallControl : Установление вызова\n(оператору и клиенту)
+
+CallControl --> Client : Уведомление о входящем вызове\n(call_id, correlation_id)
+activate Client
+
+Client -> Operator : Оповещение о вызове
+Operator -> Client : Принимает вызов
+Client -> CallControl : Accept call\n(call_id, correlation_id)
+
+CallControl -> CallControl : Установление соединения\nмежду оператором и клиентом
+
+== Ведутся события вызова ==
+loop Во время вызова
+    CallControl -> CallControl : События состояния вызова\n(call_id, user_id, correlation_id)\nringing/answered/hold/ended
+end
+
+== Завершение вызова ==
+opt Завершение вызова
+    Operator -> Client : Завершает вызов
+    Client -> CallControl : End call\n(call_id, correlation_id)
+    
+    CallControl -> CallControl : Завершение вызова\nФинализация сессии
+    
+    == Формирование CDR ==
+    CallControl -> Billing : CallEnded (CDR data)\n(call_id, correlation_id,\nuser_id, device_id,\nметаданные интеграции) [async]
+    activate Billing
+    
+    Billing -> Billing : Формирование CDR\nСвязь с integration_id\n(длительность, результат,\nссылка на запись при наличии)
+    
+    == Публикация события в CRM ==
+    Billing -> EventBus : Событие завершения вызова\n(webhook/event)\n(версия события, идемпотентность,\nминимальный payload для корреляции)
+    activate EventBus
+    
+    EventBus -> EventBus : Формирование webhook\n(call_id, correlation_id,\nintegration_id, CDR метаданные)
+    
+    EventBus -> CRM : Webhook доставка\n(событие завершения вызова)\n[retry при необходимости]
+    
+    CRM -> CRM : Получение события\nЛогирование вызова в карточке клиента\n(используя корреляцию:\ncall_id, correlation_id,\nметаданные из события:\nдлительность, результат,\nссылка на запись)
+    
+    CRM --> Operator : Обновление карточки клиента\n(логирование коммуникации)
+    deactivate EventBus
+    deactivate Billing
+    
+    == Аудит интеграции ==
+    CallControl -> Audit : Факт интеграционного взаимодействия\n(integration_id, call_id,\nuser_id, correlation_id,\nтип операции, время) [async]
+    activate Audit
+    Audit -> Audit : Фиксация аудита\nдоступа к API и использования интеграции
+    deactivate Audit
+    
+    CallControl -> Obs : Событие CallEnded\n(call_id, correlation_id, integration_id)
+    deactivate CallControl
+    deactivate Client
+end
+
+== Альтернативные сценарии ==
+alt Ошибка доставки webhook
+    EventBus -> CRM : Webhook доставка\n(недоступность CRM)
+    CRM --> EventBus : Ошибка доставки
+    
+    EventBus -> EventBus : Событие ставится в очередь\nповторной доставки
+    
+    loop Повторные попытки доставки
+        EventBus -> CRM : Повторная попытка доставки
+        alt Успешная доставка
+            CRM --> EventBus : OK
+            EventBus -> EventBus : Успешная доставка
+        else Превышен лимит попыток
+            EventBus -> EventBus : Превышен лимит попыток\nФиксация для ручной обработки
+            EventBus -> Obs : Ошибка интеграции\n(integration_id, correlation_id,\nпричина ошибки)
+            note right: Ошибки интеграции фиксируются\nв наблюдаемости
+        end
+    end
+    deactivate EventBus
+end
+
+alt Отказ оператора принять вызов
+    Client -> CallControl : Reject call\n(call_id, correlation_id)
+    CallControl -> CallControl : Завершение попытки\nОтказ оператора
+    
+    opt Событие об отказе предусмотрено контрактом
+        CallControl -> EventBus : Событие об отказе\n(call_id, correlation_id, причина)
+        EventBus -> CRM : Webhook с событием об отказе
+        CRM -> CRM : Логирование отказа\nв карточке клиента
+    end
+    
+    CallControl -> Billing : CallEnded (CDR)\n(причина завершения: отказ оператора)
+    Billing -> Billing : Фиксация причины завершения
+    CallControl -> Obs : Событие CallRejected\n(call_id, correlation_id, причина)
+    deactivate CallControl
+    deactivate Client
+    deactivate EventBus
+end
+
+== Общая наблюдаемость ==
+CallControl -> Obs : Метрики вызова\n(call_id, correlation_id,\nintegration_id, длительность)
+EventBus -> Obs : Метрики доставки webhooks\n(integration_id, correlation_id,\nуспешность, задержки)
+
+note over CRM,Billing
+    Все запросы содержат correlation_id.
+    call_id, user_id привязываются к integration_id.
+    CDR содержит метаданные интеграции.
+    События доставляются по контракту (версия,\nидемпотентность, минимальный payload).
+    Наблюдаемость: CRM -> API Gateway -> Call Control ->\nCDR -> Event Bus -> CRM.
+    Аудит интеграционного взаимодействия зафиксирован.
+end note
+
+deactivate APIGW
+deactivate CRM
+
+@enduml

@@ -1,0 +1,206 @@
+@startuml uc-04
+title UC-04. Создание и проведение видеоконференции (AV + чат конференции + запись)
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Инициатор конференции" as Initiator
+actor "Участник 1" as Participant1
+actor "Участник 2" as Participant2
+participant "UC-клиенты\n(Web/Mobile/Desktop)" as ClientInit
+participant "UC-клиенты\n(Web/Mobile/Desktop)" as ClientPart1
+participant "UC-клиенты\n(Web/Mobile/Desktop)" as ClientPart2
+participant "API Gateway" as APIGW
+participant "IAM Service" as IAM
+participant "Call Control Service" as CallControl
+participant "Media / Recording Service" as MediaRec
+participant "Presence Service" as Presence
+participant "Messaging Service\n(чат конференции)" as Messaging
+participant "Billing / CDR Service" as Billing
+participant "Observability Stack" as Obs
+
+== Создание конференции ==
+Initiator -> ClientInit : Создаёт видеоконференцию\n(название, опционально: дата/время)
+activate ClientInit
+
+ClientInit -> APIGW : Create conference\n(access token, conference params)
+activate APIGW
+
+APIGW -> IAM : Валидация токена\n[correlation_id]
+activate IAM
+IAM -> APIGW : OK (user, scopes)\nПроверка прав на создание конференции
+deactivate IAM
+
+APIGW -> CallControl : Создание конференц-сессии\n(user_id, conference params, correlation_id)
+activate CallControl
+
+CallControl -> CallControl : Проверка прав (класс обслуживания, роль)\nСоздание конференции:\nconference_id, call_id, correlation_id
+
+CallControl -> MediaRec : Резервирование ресурсов\n(медиаконтур для микширования/маршрутизации)
+activate MediaRec
+
+opt Запись требуется по политике
+    MediaRec -> MediaRec : Резервирование ресурсов записи
+end
+
+CallControl --> ClientInit : Ссылка/идентификатор конференции\n(conference_id, call_id, correlation_id)
+deactivate APIGW
+
+== Присоединение участников ==
+Initiator -> ClientInit : Приглашает участников\n(отправка ссылки)
+
+Participant1 -> ClientPart1 : Открывает ссылку конференции
+activate ClientPart1
+ClientPart1 -> APIGW : Join conference\n(conference_id, access token)
+
+APIGW -> IAM : Валидация токена участника\n[correlation_id]
+IAM -> APIGW : OK (user, scopes)
+APIGW -> CallControl : Присоединение участника\n(conference_id, user_id, correlation_id)
+
+CallControl -> CallControl : Координация аутентификации\nСогласование медиапараметров\n(SDP/ICE для WebRTC)
+
+CallControl -> MediaRec : Подключение медиапотока участника
+MediaRec -> MediaRec : Микширование/маршрутизация\nмедиапотоков
+MediaRec --> ClientPart1 : Медиапоток конференции
+
+Participant2 -> ClientPart2 : Открывает ссылку конференции
+activate ClientPart2
+... (аналогично для Participant2) ...
+
+== Чат конференции ==
+Messaging -> Messaging : Создание conversation_id\nсвязанного с conference_id
+
+loop Обмен сообщениями в чате конференции
+    Participant1 -> ClientPart1 : Отправляет сообщение в чат
+    ClientPart1 -> Messaging : Send message\n(conference_id, message)
+    Messaging -> Messaging : Сохранение сообщения\nconversation_id -> conference_id
+    
+    Messaging -> ClientInit : Событие нового сообщения\n(всем участникам)
+    Messaging -> ClientPart2 : Событие нового сообщения
+end
+
+== Управление ролями и модерация ==
+opt Изменение ролей
+    Initiator -> ClientInit : Назначает роли участникам
+    ClientInit -> CallControl : Update roles\n(conference_id, participant_id, role)
+    CallControl -> CallControl : Применение правил модерации
+    CallControl -> Obs : Событие изменения ролей\n(conference_id, correlation_id)
+end
+
+== Присутствие и совместный экран ==
+Presence -> Presence : Обновление статусов участников\nдо «в конференции»
+Presence -> ClientInit : Синхронизация статусов\nсо всеми клиентами
+Presence -> ClientPart1 : Синхронизация статусов
+Presence -> ClientPart2 : Синхронизация статусов
+
+opt Совместный экран
+    Participant1 -> ClientPart1 : Запускает совместный экран
+    ClientPart1 -> MediaRec : Запрос на трансляцию экрана
+    MediaRec -> MediaRec : Маршрутизация видео экрана\nвсем участникам
+    MediaRec -> ClientInit : Видео поток экрана
+    MediaRec -> ClientPart2 : Видео поток экрана
+end
+
+== Запись конференции ==
+opt Запись включена по политике
+    MediaRec -> MediaRec : Формирование записи\nСвязь с conference_id/call_id
+    MediaRec -> Obs : Событие записи начата\n(conference_id, recording_id, correlation_id)
+    note right: Доступ к записи регулируется\nполитиками RBAC/ABAC и аудитируется
+end
+
+== События во время конференции ==
+loop На протяжении конференции
+    CallControl -> Obs : События состояния\n(участник присоединился/покинул,\nизменение ролей) [correlation_id]
+end
+
+== Альтернативные сценарии ==
+alt Превышен лимит участников
+    ClientPart2 -> CallControl : Попытка присоединения\n(превышен лимит)
+    CallControl -> CallControl : Проверка лимита участников
+    CallControl --> ClientPart2 : Ошибка: Лимит участников превышен
+    CallControl -> Obs : Событие в аудите\n(conference_id, попытка присоединения)
+    note right: Событие фиксируется в аудите
+end
+
+alt Недоступность медиаресурсов
+    MediaRec --> CallControl : Ошибка: Медиаресурсы недоступны
+    opt Режим деградации
+        CallControl -> CallControl : Переход в режим деградации\n(только аудио)
+        CallControl -> ClientInit : Уведомление: Только аудио
+        CallControl -> ClientPart1 : Уведомление: Только аудио
+        CallControl -> ClientPart2 : Уведомление: Только аудио
+    else Отмена конференции
+        CallControl -> ClientInit : Уведомление: Конференция отменена
+        CallControl -> Obs : Техническое событие\n(причина отмены, correlation_id)
+    end
+    note right: Техническое событие для наблюдаемости
+end
+
+alt Отказ одного из участников
+    Participant1 -> ClientPart1 : Отключается
+    ClientPart1 -> CallControl : Leave conference
+    CallControl -> MediaRec : Перестройка топологии медиапотоков\nбез прерывания для остальных
+    MediaRec -> MediaRec : Обновление микширования
+    CallControl -> Obs : Событие в CDR\n(participant_left, conference_id, correlation_id)
+    note right: Событие фиксируется в CDR
+end
+
+== Завершение конференции ==
+Initiator -> ClientInit : Завершает конференцию
+ClientInit -> CallControl : End conference\n(conference_id)
+
+CallControl -> MediaRec : Завершение медиапотоков
+opt Запись была включена
+    MediaRec -> MediaRec : Финализация записи\nСвязь метаданных с conference_id/call_id
+end
+
+CallControl -> Presence : Обновление статусов участников\nпосле завершения
+Presence -> ClientInit : Синхронизация финальных статусов
+Presence -> ClientPart1 : Синхронизация финальных статусов
+Presence -> ClientPart2 : Синхронизация финальных статусов
+
+CallControl -> Billing : CallEnded (CDR/статистика конференции)\n(conference_id, call_id, correlation_id,\nдлительность, участники, медиаканалы) [async]
+activate Billing
+Billing -> Billing : Сохранение CDR и статистики\nСвязь метаданных записи
+deactivate Billing
+
+CallControl -> Obs : Событие ConferenceEnded\n(conference_id, correlation_id)
+
+deactivate CallControl
+deactivate MediaRec
+deactivate Presence
+deactivate Messaging
+deactivate ClientInit
+deactivate ClientPart1
+deactivate ClientPart2
+
+== Общая наблюдаемость ==
+CallControl -> Obs : Метрики конференции\n(conference_id, correlation_id,\nучастники, длительность)
+MediaRec -> Obs : Метрики медиа\n(качество потоков, использование ресурсов)
+
+note over Initiator,Billing
+    Все запросы содержат correlation_id.
+    conference_id, call_id привязываются к user_id, device_id.
+    conversation_id (чат) связан с conference_id.
+    CDR содержит статистику конференции и метаданные записи.
+    Наблюдаемость содержит корреляцию всех событий по correlation_id.
+end note
+
+@enduml

@@ -1,11 +1,17 @@
-@startuml Deployment_UC_Platform
-' Deployment Diagram for UC Platform (Kubernetes-focused)
-' Стиль: детализация с цветовым кодированием, заметками и легендой
+@startuml deployment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+skinparam backgroundColor #FFFFFF
+skinparam legendBackgroundColor #EEEBDC
+skinparam legendBorderColor #2D3E50
 
 skinparam linetype ortho
+skinparam arrowColor #999
+skinparam arrowThickness 1.2
 skinparam shadowing false
 skinparam defaultTextAlignment center
 left to right direction
+
+title "Платформа Унифицированных Коммуникаций — Диаграмма развертывания"
 
 skinparam node {
   BackgroundColor #F5F5F5
@@ -102,7 +108,7 @@ cloud "Облачный провайдер\nRegion EU-1" as cloud {
 cloud "Identity Provider / IdP\n(Active Directory, Okta, Azure AD)" as idp_cloud
 cloud "CRM / ERP / Service Desk\n(Salesforce, SAP, Jira)" as crm_cloud
 cloud "Email/SMS/Push Gateway\n(уведомления)" as esmsgw_cloud
-cloud "PSTN / Operator SBC\n(телефонные операторы)" as pstn_cloud
+cloud "PSTN / Operator SBC\n(операторы фиксированной связи и мобильные операторы)" as pstn_cloud
 cloud "Monitoring / SIEM\n(безопасность)" as siem_cloud
 
 ' ============ СОЕДИНЕНИЯ ============

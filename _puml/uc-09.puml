@@ -1,0 +1,256 @@
+@startuml uc-09
+title UC-09. Управление несколькими устройствами (параллельный вызов/синхронизация состояния)
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Пользователь" as User
+participant "UC-клиент Web" as ClientWeb
+participant "UC-клиент Mobile" as ClientMobile
+participant "UC-клиент Desktop" as ClientDesktop
+participant "SIP-устройство" as SIPDevice
+participant "API Gateway" as APIGW
+participant "Call Control Service" as CallControl
+participant "Presence Service" as Presence
+participant "SIP Gateway / SBC" as SIPEdge
+participant "Observability Stack" as Obs
+
+== Поступление входящего вызова ==
+participant "Внешний абонент" as Caller
+participant "PSTN/SIP-транк" as PSTN
+
+Caller -> PSTN : Набирает номер пользователя
+PSTN -> SIPEdge : SIP INVITE\n(входящий вызов) [или создание внутри домена]
+activate Caller
+activate PSTN
+activate SIPEdge
+
+SIPEdge -> CallControl : Поступление входящего вызова\n(user_id, target_number)
+activate CallControl
+
+== Определение активных устройств ==
+CallControl -> CallControl : Получение списка активных устройств\n/регистраций пользователя\nПроверка политики оповещения\n(параллельный/последовательный вызов)
+
+CallControl -> CallControl : Создание call/session\ncall_id, session_id, correlation_id\nСвязь с user_id и device_id
+
+== Оповещение всех устройств (параллельный вызов) ==
+par Оповещение Web-клиента
+    CallControl -> ClientWeb : Уведомление о входящем вызове\n(push/WebSocket)\n[call_id, session_id, correlation_id]
+    activate ClientWeb
+end
+
+par Оповещение Mobile-клиента
+    CallControl -> ClientMobile : Уведомление о входящем вызове\n(push/WebSocket)\n[call_id, session_id, correlation_id]
+    activate ClientMobile
+end
+
+par Оповещение Desktop-клиента
+    CallControl -> ClientDesktop : Уведомление о входящем вызове\n(push/WebSocket)\n[call_id, session_id, correlation_id]
+    activate ClientDesktop
+end
+
+par Оповещение SIP-устройства
+    CallControl -> SIPEdge : SIP INVITE для SIP-устройства\n(call_id, session_id, correlation_id)
+    SIPEdge -> SIPDevice : SIP INVITE\n(call_id, session_id, correlation_id)
+    activate SIPDevice
+end
+
+== Принятие вызова на одном устройстве ==
+alt Пользователь отвечает на Mobile-клиенте
+    User -> ClientMobile : Принимает вызов
+    ClientMobile -> APIGW : Accept call\n(access token, call_id, session_id)
+    activate APIGW
+    
+    APIGW -> CallControl : Подтверждение принятия вызова\n(call_id, session_id, device_id: Mobile)
+    
+    CallControl -> CallControl : Принятие вызова на устройстве\n(Mobile, device_id)
+    
+    == Отмена оповещения остальных устройств ==
+    par Отмена Web-клиента
+        CallControl -> ClientWeb : Отмена оповещения\n(push-команда отмены)\n[call_id, session_id]
+        ClientWeb -> User : Уведомление: Вызов принят\nна другом устройстве
+        deactivate ClientWeb
+    end
+    
+    par Отмена Desktop-клиента
+        CallControl -> ClientDesktop : Отмена оповещения\n(push-команда отмены)\n[call_id, session_id]
+        ClientDesktop -> User : Уведомление: Вызов принят\nна другом устройстве
+        deactivate ClientDesktop
+    end
+    
+    par Отмена SIP-устройства
+        CallControl -> SIPEdge : SIP CANCEL\n(call_id, session_id)
+        SIPEdge -> SIPDevice : SIP CANCEL
+        SIPDevice -> User : Уведомление: Вызов принят\nна другом устройстве
+        SIPDevice --> SIPEdge : SIP 200 OK
+        SIPEdge --> CallControl : CANCEL confirmed
+        deactivate SIPDevice
+    end
+    
+    CallControl -> CallControl : Синхронизация финальных состояний\nмежду устройствами
+    
+    == Установление соединения ==
+    CallControl -> SIPEdge : SIP 200 OK (для Caller)
+    SIPEdge -> PSTN : SIP 200 OK
+    PSTN --> Caller : Соединение установлено
+    
+    deactivate APIGW
+    deactivate PSTN
+    deactivate SIPEdge
+
+else Пользователь отвечает на SIP-устройстве
+    User -> SIPDevice : Принимает вызов
+    SIPDevice -> SIPEdge : SIP 200 OK\n(call_id, session_id)
+    SIPEdge -> CallControl : Подтверждение принятия вызова\n(call_id, session_id, device_id: SIP)
+    
+    CallControl -> CallControl : Принятие вызова на устройстве\n(SIP, device_id)
+    
+    par Отмена Web/Mobile/Desktop клиентов
+        CallControl -> ClientWeb : Отмена оповещения
+        CallControl -> ClientMobile : Отмена оповещения
+        CallControl -> ClientDesktop : Отмена оповещения
+        deactivate ClientWeb
+        deactivate ClientMobile
+        deactivate ClientDesktop
+    end
+    
+    ... (установление соединения аналогично) ...
+    deactivate SIPDevice
+    deactivate SIPEdge
+    deactivate PSTN
+end
+
+== Синхронизация Presence ==
+Presence -> Presence : Обновление статуса пользователя\nдо «в звонке»\nСинхронизация со всеми активными\nустройствами
+activate Presence
+
+par Синхронизация на Web-клиенте
+    Presence -> ClientWeb : Обновление статуса «в звонке»
+end
+
+par Синхронизация на Mobile-клиенте
+    Presence -> ClientMobile : Обновление статуса «в звонке»
+end
+
+par Синхронизация на Desktop-клиенте
+    Presence -> ClientDesktop : Обновление статуса «в звонке»
+end
+
+Presence --> User : Статус «в звонке» синхронизирован\nна всех устройствах
+deactivate Presence
+
+== События во время вызова ==
+loop Во время вызова
+    CallControl -> Obs : События состояния\n(answered/hold/ended)\n[call_id, session_id, correlation_id]
+    activate Obs
+    Obs -> Obs : Регистрация событий вызова
+    deactivate Obs
+end
+
+== Завершение вызова ==
+opt Завершение вызова
+    User -> ClientMobile : Завершает вызов
+    ClientMobile -> CallControl : End call\n(call_id, session_id)
+    
+    CallControl -> CallControl : Завершение вызова\nФинализация сессии
+    
+    CallControl -> Presence : Обновление статуса пользователя\nдо актуального после завершения
+    activate Presence
+    
+    par Синхронизация финальных статусов на устройствах
+        Presence -> ClientWeb : Обновление статуса после завершения
+        Presence -> ClientMobile : Обновление статуса после завершения
+        Presence -> ClientDesktop : Обновление статуса после завершения
+    end
+    
+    Presence --> User : Статус обновлён и синхронизирован\nна всех устройствах
+    deactivate Presence
+    
+    CallControl -> Obs : Событие CallEnded\n(call_id, session_id, correlation_id)
+    deactivate CallControl
+    deactivate ClientMobile
+    deactivate User
+end
+
+== Альтернативные сценарии ==
+alt Последовательный вызов
+    loop Оповещение устройств последовательно с таймаутом
+        CallControl -> ClientWeb : Оповещение с таймаутом
+        activate ClientWeb
+        
+        alt Нет ответа в течение таймаута
+            CallControl -> ClientWeb : Завершение попытки
+            deactivate ClientWeb
+            CallControl -> ClientMobile : Оповещение с таймаутом
+            ... (переход к следующему устройству) ...
+        else Ответ получен
+            ClientWeb -> CallControl : Accept call
+            ... (установление соединения) ...
+        end
+    end
+    
+    CallControl -> Obs : Статистика попыток\n(call_id, correlation_id, попытки)
+    note right: Статистика попыток фиксируется в CDR
+end
+
+alt Превышен лимит регистраций
+    CallControl -> CallControl : Проверка лимита регистраций
+    
+    alt Применение политики ограничения
+        CallControl -> CallControl : Отклонение новой регистрации\nили вытеснение старой\n(согласно политике)
+        
+        CallControl -> Obs : Событие: Превышен лимит регистраций\n(user_id, device_id, причина)
+        note right: Событие фиксируется в аудите
+    end
+end
+
+alt Ошибка синхронизации состояния
+    CallControl -> CallControl : Обнаружена ошибка синхронизации\nмежду устройствами
+    
+    opt Повторная синхронизация
+        CallControl -> ClientWeb : Команда синхронизации состояния
+        CallControl -> ClientMobile : Команда синхронизации состояния
+        CallControl -> ClientDesktop : Команда синхронизации состояния
+        
+        alt Успешная синхронизация
+            CallControl -> CallControl : Состояние синхронизировано
+        else Ошибка синхронизации
+            CallControl -> Obs : Ошибка синхронизации состояния\n(call_id, correlation_id, причина)
+            note right: Ошибки фиксируются в наблюдаемости
+        end
+    end
+end
+
+== Общая наблюдаемость ==
+CallControl -> Obs : Метрики мультидевайс\n(call_id, correlation_id,\nколичество устройств, политика,\nрезультат оповещения)
+Presence -> Obs : Метрики синхронизации Presence\n(user_id, количество устройств,\nвремя синхронизации)
+
+note over User,Obs
+    Все запросы содержат correlation_id.
+    call_id, session_id привязываются к user_id и device_id.
+    Состояние вызова синхронизировано между устройствами.
+    Presence обновлён и синхронизирован на всех устройствах.
+    Наблюдаемость содержит корреляцию событий по correlation_id.
+end note
+
+deactivate Obs
+deactivate Caller
+
+@enduml

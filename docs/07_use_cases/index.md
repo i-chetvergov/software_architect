@@ -35,14 +35,14 @@
 
 | ID | Сценарий | Акторы | Связь с требованиями | Диаграмма последовательности |
 |----|----------|--------|----------------------|----------------------------|
-| **UC-01** | Исходящий голосовой вызов из веб-клиента (WebRTC -> SIP/PSTN) | Пользователь, WebRTC-клиент, API Gateway, IAM, Call Control, WebRTC Gateway, SBC/SIP Edge, Media, PSTN/абонент, CDR | FR-02, FR-06, FR-07, FR-08, FR-12, FR-13, FR-15; NFR-03, NFR-04, NFR-05 | UC_Seq_Outgoing_Call |
-| **UC-02** | Входящий вызов с маршрутизацией по очереди/группе | Внешний абонент, PSTN/SIP-транк, SBC/SIP Edge, Call Control, Presence, UC-клиенты операторов, Media, CDR | FR-02, FR-05, FR-07, FR-08, FR-11, FR-12, FR-13, FR-15; NFR-02, NFR-03, NFR-06 | UC_Seq_Incoming_Call |
+| **UC-01** | Исходящий голосовой вызов из веб-клиента (WebRTC -> SIP/PSTN) | Пользователь, WebRTC-клиент, API Gateway, IAM, Call Control, WebRTC Gateway, SIP Gateway / SBC, Media / Recording Service, PSTN/внешний пользователь, Billing / CDR Service | FR-02, FR-06, FR-07, FR-08, FR-12, FR-13, FR-15; NFR-03, NFR-04, NFR-05 | UC_Seq_Outgoing_Call |
+| **UC-02** | Входящий вызов с маршрутизацией по очереди/группе | Внешний пользователь, PSTN/SIP-транк, SIP Gateway / SBC, Call Control, Presence, UC-клиенты операторов, Media / Recording Service, Billing / CDR Service | FR-02, FR-05, FR-07, FR-08, FR-11, FR-12, FR-13, FR-15; NFR-02, NFR-03, NFR-06 | UC_Seq_Incoming_Call |
 | **UC-03** | Чат между сотрудниками (доставка, история, синхронизация устройств) | Пользователь A, Пользователь B, UC-клиенты, API Gateway, IAM, Messaging, Presence | FR-04, FR-05, FR-12, FR-13, FR-15; NFR-03, NFR-05, NFR-09 | UC_Seq_Chat_1to1 (план) |
 | **UC-04** | Создание и проведение видеоконференции (AV + чат конференции + запись) | Инициатор, участники, UC-клиенты, Call Control, Media, Presence, CDR | FR-03, FR-04, FR-05, FR-07, FR-08, FR-12, FR-13, FR-15; NFR-01, NFR-02, NFR-03 | UC_Seq_Conference (план) |
 | **UC-05** | Интеграция с CRM: click-to-call + карточка клиента + логирование | Оператор, CRM, API Gateway, IAM, Call Control, CDR, Event Bus/Webhooks | FR-06, FR-08, FR-15, FR-14; NFR-04, NFR-07, NFR-08 | UC_Seq_CRM_ClickToCall (план) |
 | **UC-06** | Provisioning: управление пользователями/номерами/политиками/маршрутизацией | Администратор, Admin UI/API, IAM, Provisioning, Call Control, CDR | FR-01, FR-10, FR-11, FR-14, FR-15; NFR-04, NFR-10 | UC_Seq_Provisioning (план) |
 | **UC-07** | Аутентификация пользователя и получение токена (SSO) | Пользователь, UC-клиент, API Gateway, IAM, IdP | FR-01, FR-14, FR-15; NFR-04, NFR-09 | UC_Seq_User_Auth_Token |
-| **UC-08** | Доступ к записи разговора с контролем прав и аудитом | Пользователь/руководитель/ИБ, API Gateway, IAM, Media/Recording, Object Storage, Audit | FR-07, FR-14, FR-15; NFR-04, NFR-09 | UC_Seq_Recording_Access (план) |
+| **UC-08** | Доступ к записи разговора с контролем прав и аудитом | Пользователь/руководитель/ИБ, API Gateway, IAM, Media / Recording Service, Object Storage, Audit | FR-07, FR-14, FR-15; NFR-04, NFR-09 | UC_Seq_Recording_Access (план) |
 | **UC-09** | Управление несколькими устройствами (параллельный вызов/синхронизация состояния) | Пользователь, несколько UC-клиентов/SIP-устройств, Call Control, Presence, SBC, API Gateway | FR-12, FR-05, FR-02, FR-15; NFR-03, NFR-05 | UC_Seq_MultiDevice_Incoming (план) |
 
 Примечание: сценарии со статусом «план» подлежат детализации и оформлению в разделе диаграмм (Sequence) после согласования архитектурной декомпозиции (C4 Containers) и выбора ключевых технологических решений.

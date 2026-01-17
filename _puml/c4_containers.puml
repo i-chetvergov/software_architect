@@ -1,12 +1,16 @@
-@startuml C4_Containers_UC_Platform
-' C4 Container Diagram for Unified Communications Platform
-' Стиль: детализация с цветовым кодированием доменов, заметками и легендой
+@startuml c4_containers
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+skinparam backgroundColor #FFFFFF
+skinparam legendBackgroundColor #EEEBDC
+skinparam legendBorderColor #2D3E50
 
 skinparam linetype ortho
 skinparam componentStyle rectangle
 skinparam shadowing false
 skinparam defaultTextAlignment center
 left to right direction
+
+title "Платформа Унифицированных Коммуникаций — Контейнерная диаграмма системы"
 
 ' ============ ЦВЕТОВАЯ СХЕМА ДОМЕНОВ ============
 skinparam package {
@@ -26,286 +30,237 @@ skinparam package {
   BorderColor<<Данные>> #3F51B5
 }
 
-skinparam component {
-  BackgroundColor<<Периметр>> #FFEBEE
-  BorderColor<<Периметр>> #C62828
-  BackgroundColor<<Внешний>> #FFF9C4
-  BorderColor<<Внешний>> #F9A825
-  BackgroundColor<<Клиент>> #E0F7FA
-  BorderColor<<Клиент>> #00838F
-}
-
-skinparam database {
-  BackgroundColor #EFEBE9
-  BorderColor #5D4037
-}
-
-skinparam node {
-  BackgroundColor<<Данные>> #E8EAF6
-  BorderColor<<Данные>> #3F51B5
-}
-
 ' ============ АКТЁРЫ ============
 
-actor "Корпоративный пользователь" as user
-actor "Администратор UC" as admin
-actor "Внешний абонент" as external_caller
+Person(corpUser, "Корпоративный пользователь", "Сотрудник, агент, использующий UC-платформу")
+Person(admin, "Администратор UC", "IT-администратор, управляющий системой")
+Person(securityOfficer, "Офицер информационной безопасности", "Специалист по безопасности, контролирующий доступ и политики ИБ")
+Person(externalUser, "Внешний пользователь", "Любой человек, подключающийся по ссылке через приложение или браузер")
 
-' ============ КЛИЕНТ И CDN ============
+' ============ СИСТЕМА UC PLATFORM ============
 
-node "Устройство пользователя\n(ПК / ноутбук / мобильное)" as device <<Клиент>> {
-  node "Браузер / Приложение" as browser {
-    component "UC Web Client\n(WebRTC, WebTransport)" as web_client <<Клиент>>
-  }
+System_Boundary(ucPlatform, "Платформа Унифицированных Коммуникаций") {
+    
+    ' ---- Периметр ----
+    Container(apiGateway, "API Gateway", "HTTPS, REST, WebSocket", "API-шлюз и WAF для маршрутизации запросов")
+    Container(iam, "IAM Service", "OIDC, SAML 2.0", "Сервис аутентификации и авторизации")
+    
+    ' ---- Сигнализация ----
+    Container(callControl, "Call Control Service", "HTTP, gRPC, SIP", "Управление вызовами и маршрутизация")
+    Container(sipgw, "SIP Gateway / SBC", "SIP", "Session Border Controller для SIP-транков")
+    Container(webrtcGw, "WebRTC Gateway", "WebRTC, WebTransport", "WebRTC шлюз для клиентских соединений")
+    
+    ' ---- Медиа ----
+    Container(mediaRec, "Media / Recording Service", "RTP, SRTP", "Обработка медиапотоков и запись разговоров")
+    
+    ' ---- Presence и Messaging ----
+    Container(presence, "Presence Service", "HTTP, gRPC, Events", "Управление статусами пользователей")
+    Container(chat, "Messaging / Chat Service", "WebSocket, WebRTC", "Текстовый и голосовой чат")
+    
+    ' ---- Монетизация и биллинг ----
+    Container(billing, "Billing / CDR Service", "HTTP, gRPC, Events", "Детализация вызовов и биллинг")
+    
+    ' ---- Платформа ----
+    Container(provisioning, "Provisioning Service", "HTTP, gRPC, Events", "Управление пользователями и конфигурацией")
+    Container(notify, "Notification Service", "HTTP, Events", "Сервис уведомлений")
+    Container(observability, "Observability Stack", "Metrics, Logs, Traces", "Мониторинг, логирование и трейсинг")
 }
 
-node "Интернет / CDN" as cdn_layer <<Клиент>> {
-  component "CDN статики\nи медиа-ассетов" as cdn_assets <<Клиент>>
-}
+' ============ КЛИЕНТ ============
+
+System_Ext(ucClients, "UC Clients", "Веб-клиент (WebRTC, WebTransport), мобильные приложения (iOS/Android), Desktop-клиенты")
 
 ' ============ ВНЕШНИЕ СИСТЕМЫ ============
 
-node "Внешние системы" as external <<Внешний>> {
-  component "Identity Provider / IdP\n(Active Directory, Okta)" as idp <<Внешний>>
-  component "CRM / ERP / Service Desk\n(Salesforce, SAP, Jira)" as crm <<Внешний>>
-  component "PSTN / Операторская сеть\n(телефонные операторы)" as pstn <<Внешний>>
-  component "Email/SMS/Push Gateway\n(уведомления)" as esmsgw <<Внешний>>
-}
+System_Ext(idp, "Identity Provider", "Active Directory, Okta, Azure AD — аутентификация и SSO")
+System_Ext(crm, "CRM / ERP / Service Desk", "Salesforce, SAP, Jira — интеграция с бизнес-системами")
+System_Ext(pstn, "PSTN / Операторская сеть", "Операторы фиксированной связи и мобильные операторы — голосовая связь через SIP-транки")
+System_Ext(esmsgw, "Email/SMS/Push Gateway", "Система уведомлений — email, SMS, push-уведомления")
+System_Ext(monitoring, "Системы мониторинга и ИБ", "SIEM, Security — наблюдаемость и безопасность")
 
-' ============ ОБЛАЧНЫЙ РЕГИОН ============
+' ============ ХРАНИЛИЩА ДАННЫХ ============
 
-node "Облачный регион\n(UC Platform)" as cloud {
-
-  ' ---- Публичный периметр ----
-  package "Публичный периметр" as edge <<Периметр>> {
-    component "API Gateway / WAF" as api_gateway <<Периметр>>
-    component "IAM / Identity Service\n(auth)" as iam <<Периметр>>
-  }
-
-  ' ---- Сервисный кластер ----
-  package "Сервисный кластер\n(приложения)" as app {
-
-    package "Сигнализация" as pkg_sig <<Сигнализация>> {
-      component "Call Control Service\n(call-control)" as call_control
-      component "SIP Gateway / SBC\n(sip-gw)" as sipgw
-      component "WebRTC Gateway\n(webrtc-gw)" as webrtc_gw
-    }
-
-    package "Медиа" as pkg_media <<Медиа>> {
-      component "Media / Recording Service\n(media-rec)" as media_rec
-    }
-
-    package "Presence и Messaging" as pkg_pres <<Presence>> {
-      component "Presence Service\n(presence)" as presence
-      component "Messaging / Chat Service\n(chat)" as chat
-    }
-
-    package "Монетизация и биллинг" as pkg_bill <<Монетизация>> {
-      component "Billing / CDR Service\n(billing)" as billing
-    }
-
-    package "Платформа (общесистемные сервисы)" as pkg_platform <<Платформа>> {
-      component "Provisioning Service\n(provisioning)" as provisioning
-      component "Notification Service\n(notify)" as notify
-      component "Observability Stack\n(metrics/logs/traces)" as observability
-    }
-  }
-
-  ' ---- Слой данных ----
-  package "Слой данных" as data <<Данные>> {
-    database "БД аккаунтов и профилей\n(PostgreSQL)" as db_accounts
-    database "БД сигнализации и вызовов\n(PostgreSQL)" as db_calls
-    database "БД CDR и биллинга\n(PostgreSQL)" as db_cdr
-    database "БД presence и сообщений\n(PostgreSQL)" as db_messaging
-    component "Кэш / сессии\n(Redis)" as cache
-    component "Очередь сообщений\n(Kafka / RabbitMQ)" as message_queue
-    component "Object Storage\n(Recordings)" as obj_store
-  }
-}
+SystemDb_Ext(dbAccounts, "БД аккаунтов и профилей", "PostgreSQL", "Хранилище аккаунтов, профилей, конфигураций")
+SystemDb_Ext(dbCalls, "БД сигнализации и вызовов", "PostgreSQL", "Хранилище вызовов, сессий, маршрутизации")
+SystemDb_Ext(dbCdr, "БД CDR и биллинга", "PostgreSQL", "Хранилище CDR записей и биллинговых данных")
+SystemDb_Ext(dbMessaging, "БД presence и сообщений", "PostgreSQL", "Хранилище сообщений, чатов, presence")
+SystemDb_Ext(cache, "Кэш / сессии", "Redis", "Кэширование сессий, токенов, presence")
+SystemDb_Ext(messageQueue, "Очередь сообщений", "Kafka / RabbitMQ", "Брокер сообщений для асинхронной обработки")
+SystemDb_Ext(objStore, "Object Storage", "S3-совместимое", "Хранение записей разговоров и медиа-файлов")
 
 ' ============ ВЗАИМОДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЕЙ ============
 
-user --> web_client   : Управление вызовами,\nчат, presence
-admin --> web_client  : Администрирование,\nуправление политиками
-external_caller --> pstn : Звонки в компанию
+Rel(corpUser, ucClients, "Использует", "Голос/видео/чат, управление контактами")
+Rel(admin, apiGateway, "Администрирует", "Управление политиками, пользователями, маршрутизацией")
+Rel(securityOfficer, observability, "Контролирует", "Мониторинг безопасности, аудит доступа")
+Rel(externalUser, ucClients, "Подключается", "Подключение по ссылке через приложение или браузер")
 
-' ============ ВЕБ-КЛИЕНТ ============
+' ============ КЛИЕНТСКИЕ ВЗАИМОДЕЙСТВИЯ ============
 
-web_client --> cdn_assets  : HTTPS\nзагрузка статики и ассетов
-web_client --> api_gateway : HTTPS/JSON\nREST / Web API-запросы
-web_client --> webrtc_gw   : WebTransport/UDP\nсигнализация вызовов\n(real-time)
-web_client --> webrtc_gw   : WebRTC (DTLS/SRTP)\nмедиа-потоки (голос/видео)
-web_client --> chat        : WebSocket/WebRTC\nчат и голосовой чат
+Rel(ucClients, apiGateway, "HTTPS/JSON", "REST / Web API-запросы")
+Rel(ucClients, webrtcGw, "WebTransport/UDP", "Сигнализация вызовов (real-time)")
+Rel(ucClients, webrtcGw, "WebRTC (DTLS/SRTP)", "Медиа-потоки (голос/видео)")
+Rel(ucClients, chat, "WebSocket/WebRTC", "Чат и голосовой чат")
 
 ' ============ API-ШЛЮЗ К СЕРВИСАМ ============
 
-api_gateway --> iam            : HTTP/gRPC\nвалидация токенов
-api_gateway --> call_control   : HTTP/gRPC\nинициация/управление вызовами
-api_gateway --> chat           : HTTP/gRPC\nсообщения и чаты
-api_gateway --> presence       : HTTP/gRPC\nзапросы статусов
-api_gateway --> notify         : HTTP/gRPC\nинициация уведомлений
-api_gateway --> provisioning   : HTTP/gRPC\nуправление пользователями
+Rel(apiGateway, iam, "HTTP/gRPC", "Валидация токенов")
+Rel(apiGateway, callControl, "HTTP/gRPC", "Инициация/управление вызовами")
+Rel(apiGateway, chat, "HTTP/gRPC", "Сообщения и чаты")
+Rel(apiGateway, presence, "HTTP/gRPC", "Запросы статусов")
+Rel(apiGateway, notify, "HTTP/gRPC", "Инициация уведомлений")
+Rel(apiGateway, provisioning, "HTTP/gRPC", "Управление пользователями")
 
 ' ============ АУТЕНТИФИКАЦИЯ И АВТОРИЗАЦИЯ ============
 
-pkg_sig      ..> iam : gRPC / HTTP\nвалидация токенов\nruntime-сервисов
-pkg_media    ..> iam : gRPC / HTTP\nвалидация токенов\nмедиа-сервисов
-pkg_pres     ..> iam : gRPC / HTTP\nвалидация токенов\npresence/messaging
-pkg_platform ..> iam : gRPC / HTTP\nслужебные проверки
+Rel(callControl, iam, "gRPC / HTTP", "Валидация токенов runtime-сервисов")
+Rel(mediaRec, iam, "gRPC / HTTP", "Валидация токенов медиа-сервисов")
+Rel(presence, iam, "gRPC / HTTP", "Валидация токенов presence/messaging")
+Rel(chat, iam, "gRPC / HTTP", "Валидация токенов presence/messaging")
+Rel(provisioning, iam, "gRPC / HTTP", "Служебные проверки")
+Rel(observability, iam, "gRPC / HTTP", "Служебные проверки")
 
-iam --> idp : OIDC / SAML 2.0\nSSO и федерация
+Rel(iam, idp, "OIDC / SAML 2.0", "SSO и федерация")
 
 ' ============ СИГНАЛИЗАЦИЯ (КЛЮЧЕВОЙ ПУТЬ) ============
 
-call_control --> sipgw      : SIP (сигнализация)\nисходящие/входящие вызовы
-call_control --> webrtc_gw  : WebRTC (DTLS/SRTP)\nсигнализация и медиа
-sipgw --> pstn               : SIP-транки\nинтеграция с оператором
-pstn --> sipgw               : SIP-транки\nвходящие вызовы
+Rel(callControl, sipgw, "SIP", "Исходящие/входящие вызовы")
+Rel(callControl, webrtcGw, "WebRTC (DTLS/SRTP)", "Сигнализация и медиа")
+Rel(sipgw, pstn, "SIP-транки", "Интеграция с оператором")
+Rel(pstn, sipgw, "SIP-транки", "Входящие вызовы")
 
 ' ============ МЕДИА (КЛЮЧЕВЫЕ ВЗАИМОДЕЙСТВИЯ) ============
 
-webrtc_gw --> media_rec : RTP/SRTP\nмедиа-потоки и запись
-sipgw --> media_rec        : RTP/SRTP\nмедиа-потоки (PSTN)
+Rel(webrtcGw, mediaRec, "RTP/SRTP", "Медиа-потоки и запись")
+Rel(sipgw, mediaRec, "RTP/SRTP", "Медиа-потоки (PSTN)")
 
 ' ============ PRESENCE И MESSAGING ============
 
-chat --> presence : Events\nобновление статуса\nпо активности
-presence --> chat : Events\nуведомления о статусах
+Rel(chat, presence, "Events", "Обновление статуса по активности")
+Rel(presence, chat, "Events", "Уведомления о статусах")
 
 ' ============ МОНИТИЗАЦИЯ И БИЛЛИНГ ============
 
-call_control --> billing : Events (CDR)\nдетализация вызовов [async]
-media_rec --> billing     : Events\nинформация о записях [async]
-billing --> crm           : REST / Export\nотчётность и интеграции
+Rel(callControl, billing, "Events (CDR)", "Детализация вызовов [async]")
+Rel(mediaRec, billing, "Events", "Информация о записях [async]")
+Rel(billing, crm, "REST / Export", "Отчётность и интеграции")
 
 ' ============ ПЛАТФОРМА: PROVISIONING, NOTIFY ============
 
-provisioning --> iam           : REST / Events\nсоздание/обновление\nпользователей
-provisioning --> call_control  : REST / Events\nномера, маршрутизация
-provisioning --> billing       : REST / Events\nтарифы, биллинг-параметры
+Rel(provisioning, iam, "REST / Events", "Создание/обновление пользователей")
+Rel(provisioning, callControl, "REST / Events", "Номера, маршрутизация")
+Rel(provisioning, billing, "REST / Events", "Тарифы, биллинг-параметры")
 
-notify --> esmsgw : SMTP / HTTPS\nуведомления (email/SMS/push)
-api_gateway --> notify : REST / Events\nсистемные и бизнес-события
+Rel(notify, esmsgw, "SMTP / HTTPS", "Уведомления (email/SMS/push)")
+Rel(apiGateway, notify, "REST / Events", "Системные и бизнес-события")
 
-' ============ ДОСТУП К ДАННЫМ (АГРЕГИРОВАНО) ============
+' ============ ДОСТУП К ДАННЫМ ============
 
-pkg_platform --> db_accounts  : SQL\nаккаунты, профили, конфиги
-pkg_sig       --> db_calls     : SQL\nвызовы, сессии, маршрутизация
-pkg_bill      --> db_cdr       : SQL\nCDR записи, биллинг
-pkg_pres      --> db_messaging : SQL\nсообщения, чаты, presence
+Rel(provisioning, dbAccounts, "SQL", "Аккаунты, профили, конфиги")
+Rel(callControl, dbCalls, "SQL", "Вызовы, сессии, маршрутизация")
+Rel(billing, dbCdr, "SQL", "CDR записи, биллинг")
+Rel(chat, dbMessaging, "SQL", "Сообщения, чаты")
+Rel(presence, dbMessaging, "SQL", "Presence")
 
-' агрегированное использование Redis
-pkg_sig       --> cache : Redis\nкэш сессий, токенов, маршрутизации
-pkg_pres      --> cache : Redis\nкэш presence, активные чаты
-pkg_platform  --> cache : Redis\nкэш токенов и feature-флагов
+' Агрегированное использование Redis
+Rel(callControl, cache, "Redis", "Кэш сессий, токенов, маршрутизации")
+Rel(presence, cache, "Redis", "Кэш presence, активные чаты")
+Rel(chat, cache, "Redis", "Кэш активных чатов")
+Rel(iam, cache, "Redis", "Кэш токенов и feature-флагов")
 
 ' Object Storage
-media_rec --> obj_store : Запись медиа-файлов\n(recordings)
+Rel(mediaRec, objStore, "S3 API", "Запись медиа-файлов (recordings)")
 
 ' ============ НАБЛЮДАЕМОСТЬ И МЕТРИКИ (АГРЕГИРОВАНО) ============
 
-pkg_sig      ..> observability : Метрики сигнализации\n(вызовы, ошибки, latency)\n[async]
-pkg_media    ..> observability : Метрики медиа\n(качество, записи)\n[async]
-pkg_pres     ..> observability : Метрики messaging/presence\n[async]
-pkg_bill     ..> observability : Бизнес-метрики\n(CDR, биллинг)\n[async]
-pkg_platform ..> observability : Тех. метрики платформы\n[async]
+Rel(callControl, observability, "Metrics", "Метрики сигнализации (вызовы, ошибки, latency) [async]")
+Rel(mediaRec, observability, "Metrics", "Метрики медиа (качество, записи) [async]")
+Rel(chat, observability, "Metrics", "Метрики messaging/presence [async]")
+Rel(presence, observability, "Metrics", "Метрики messaging/presence [async]")
+Rel(billing, observability, "Metrics", "Бизнес-метрики (CDR, биллинг) [async]")
+Rel(provisioning, observability, "Metrics", "Тех. метрики платформы [async]")
 
-observability ..> message_queue : События для фоновой\nаналитики / алёртов [async]
+Rel(observability, monitoring, "Metrics / Logs / Traces", "Наблюдаемость и ИБ")
+Rel(observability, messageQueue, "Events", "События для фоновой аналитики / алёртов [async]")
 
 ' ============ АСИНХРОННАЯ ОБРАБОТКА (АГРЕГИРОВАНО) ============
 
-pkg_sig      ..> message_queue : События вызовов\n(call started/ended) [async]
-pkg_bill     ..> message_queue : События биллинга\n[async]
-pkg_platform ..> message_queue : Служебные события\n[async]
+Rel(callControl, messageQueue, "Events", "События вызовов (call started/ended) [async]")
+Rel(billing, messageQueue, "Events", "События биллинга [async]")
+Rel(provisioning, messageQueue, "Events", "Служебные события [async]")
 
 ' ============ ПРИМЕЧАНИЯ ============
 
-note top of app
-  Контейнерный уровень (C4):
-  каждый компонент — развернутый сервис
-  или приложение, а не отдельный класс.
-  
-  Архитектурные принципы:
-  - Микросервисная архитектура
-  - Event-driven коммуникации
-  - Real-time обработка (WebRTC, WebTransport)
-  - Горизонтальное масштабирование
+note right of ucPlatform
+    Контейнерный уровень (C4):
+    каждый компонент — развернутый сервис
+    или приложение, а не отдельный класс.
+    
+    Архитектурные принципы:
+    - Микросервисная архитектура
+    - Event-driven коммуникации
+    - Real-time обработка (WebRTC, WebTransport)
+    - Горизонтальное масштабирование
+    - Отказоустойчивость (HA)
 end note
 
-note right of data
-  Слой данных разделён по доменам:
-  - аккаунты и профили (db_accounts);
-  - сигнализация и вызовы (db_calls);
-  - CDR и биллинг (db_cdr);
-  - presence и messaging (db_messaging).
-  
-  Redis используется для:
-  - кэширования часто читаемых данных;
-  - хранения сессий и токенов;
-  - временных данных (presence, активные чаты).
-  
-  Object Storage для:
-  - хранения записей разговоров;
-  - медиа-файлов.
+note bottom of dbAccounts
+    Слой данных разделён по доменам:
+    - аккаунты и профили (dbAccounts);
+    - сигнализация и вызовы (dbCalls);
+    - CDR и биллинг (dbCdr);
+    - presence и messaging (dbMessaging).
+    
+    Redis используется для:
+    - кэширования часто читаемых данных;
+    - хранения сессий и токенов;
+    - временных данных (presence, активные чаты).
+    
+    Object Storage для:
+    - хранения записей разговоров;
+    - медиа-файлов.
 end note
 
-note bottom of pkg_sig
-  Сигнализация (runtime-контур):
-  критический путь call_control --> sipgw/webrtc_gw,
-  жёсткие требования к задержкам.
-  
-  WebTransport используется для:
-  - низколатентной сигнализации;
-  - real-time обновлений состояния.
+note bottom of callControl
+    Сигнализация (runtime-контур):
+    критический путь call_control --> sipgw/webrtc_gw,
+    жёсткие требования к задержкам.
+    
+    WebTransport используется для:
+    - низколатентной сигнализации;
+    - real-time обновлений состояния.
 end note
 
-note bottom of pkg_media
-  Медиа-сервисы:
-  - обработка RTP/SRTP потоков;
-  - запись разговоров;
-  - транскодирование кодеков;
-  - управление качеством (QoS).
+note bottom of mediaRec
+    Медиа-сервисы:
+    - обработка RTP/SRTP потоков;
+    - запись разговоров;
+    - транскодирование кодеков;
+    - управление качеством (QoS).
 end note
 
-note bottom of pkg_bill
-  Домены монетизации изолированы:
-  изменения в биллинге и CDR
-  не влияют напрямую на сигнализацию.
+note bottom of billing
+    Домены монетизации изолированы:
+    изменения в биллинге и CDR
+    не влияют напрямую на сигнализацию.
 end note
 
-note right of external
-  Внешние системы:
-  - IdP обрабатывает аутентификацию
-    и SSO;
-  - CRM/ERP интегрируются через
-    REST/Webhook для автоматизации;
-  - PSTN обеспечивает телефонную связь
-    через SIP-транки.
+note right of pstn
+    PSTN интеграция через SBC:
+    - Безопасная маршрутизация SIP-трафика
+    - Нормализация сигнализации
+    - Защита от атак (DDoS, SIP-флуд)
+    - Транскодирование кодеков
 end note
 
-note bottom of message_queue
-  Очередь сообщений используется для:
-  - асинхронной обработки событий;
-  - интеграции между сервисами;
-  - буферизации нагрузки в пиках;
-  - event-driven архитектуры.
+note bottom of messageQueue
+    Очередь сообщений используется для:
+    - асинхронной обработки событий;
+    - интеграции между сервисами;
+    - буферизации нагрузки в пиках;
+    - event-driven архитектуры.
 end note
 
-' ============ ЛЕГЕНДА ============
-
-legend bottom
-  == Условные обозначения ==
-  -->   Синхронный запрос (HTTP, gRPC, WebSocket, SIP, SQL)
-  ..>   Асинхронные события, метрики, логирование
-  
-  Цветовое кодирование доменов:
-  Синий      - Сигнализация (Call Control, SIP, WebRTC)
-  Зелёный    - Медиа (Recording, Media Server)
-  Оранжевый  - Presence и Messaging
-  Фиолетовый - Монетизация и биллинг
-  Серый      - Платформа (Provisioning, Notify, Observability)
-  Красный    - Периметр (API Gateway, IAM)
-  Синий (тёмный) - Данные (БД, кэш, очереди)
-endlegend
+SHOW_LEGEND()
 
 @enduml

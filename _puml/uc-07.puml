@@ -1,0 +1,180 @@
+@startuml uc-07
+title UC-07. Аутентификация пользователя и получение токена (SSO)
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Пользователь" as User
+participant "UC-клиент" as Client
+participant "API Gateway" as APIGW
+participant "IAM Service" as IAM
+participant "Identity Provider\n(IdP)" as IdP
+participant "Audit Logging" as Audit
+participant "Observability Stack" as Obs
+
+== Инициация аутентификации ==
+User -> Client : Открывает UC-клиент\nИнициирует вход
+activate User
+activate Client
+
+Client -> APIGW : Инициирует поток аутентификации\n(auth request)
+activate APIGW
+
+APIGW -> IAM : Поток аутентификации\n(инициация OIDC/SAML)
+activate IAM
+
+== Перенаправление в IdP ==
+IAM -> IAM : Определение политики аутентификации\n(MFA, срок действия токенов)
+
+IAM -> IdP : Перенаправление пользователя\n(OIDC/SAML flow, включая MFA\nпо политике)
+activate IdP
+
+IAM --> Client : Redirect to IdP\n(IdP URL, auth parameters)
+Client --> User : Перенаправление в IdP\n(открытие страницы аутентификации)
+
+== Аутентификация в IdP ==
+User -> IdP : Вводит учётные данные\n(и при необходимости проходит MFA)
+IdP -> IdP : Проверка учётных данных\nМногофакторная аутентификация (MFA)
+
+alt Успешная аутентификация
+    IdP -> IdP : Подтверждение аутентификации\n(code/assertion для OIDC/SAML)
+    
+    IdP --> Client : Возврат в UC-платформу\n(code/assertion, state)
+    Client -> APIGW : Обмен code/assertion\nна токены (code, state)
+    
+    APIGW -> IAM : Обмен code/assertion\nна токены (OIDC/SAML)
+    IAM -> IdP : Обмен code/assertion\nна токены (OIDC/SAML protocol)
+    IdP -> IAM : Токены (access_token,\nrefresh_token, id_token)
+    
+    IAM -> IAM : Валидация токенов\nСоздание сессии пользователя
+    
+    IAM --> APIGW : Токены (access_token,\nrefresh_token, id_token)
+    APIGW -> APIGW : Установка сессии\nмежду клиентом и API Gateway
+    
+    APIGW --> Client : Токены доступа\n(access_token, refresh_token,\nсессия, correlation_id)
+    
+    Client -> Client : Сохранение токенов\nУстановка сессии
+    Client --> User : Доступ к UC-сервисам\n(клиент готов к использованию)
+    
+    == Фиксация событий ==
+    IAM -> Audit : Событие успешного входа\n(user_id, correlation_id,\nвремя, метод аутентификации) [async]
+    activate Audit
+    Audit -> Audit : Фиксация в Audit Logging\nдля безопасности
+    deactivate Audit
+    
+    IAM -> Obs : Событие аутентификации\n(user_id, correlation_id,\nрезультат: success)
+    activate Obs
+    Obs -> Obs : Регистрация событий входа
+    deactivate Obs
+    
+    deactivate IdP
+    deactivate IAM
+    deactivate APIGW
+    deactivate Client
+    deactivate User
+
+else Ошибка аутентификации
+    IdP -> IdP : Ошибка аутентификации\n(неверные учётные данные,\nошибка MFA)
+    
+    IdP --> Client : Возврат с ошибкой\n(error, error_description)
+    Client -> APIGW : Ошибка аутентификации\n(error)
+    
+    APIGW -> IAM : Ошибка аутентификации\n(error)
+    IAM -> IAM : Обработка ошибки\nФиксация попытки входа
+    
+    IAM --> APIGW : Ошибка аутентификации\n(error_response)
+    APIGW --> Client : Ошибка аутентификации\n(error_response)
+    Client --> User : Сообщение об ошибке\n(неверные учётные данные)
+    
+    == Фиксация попытки входа ==
+    IAM -> Audit : Попытка входа с ошибкой\n(user_id если известен,\ncorrelation_id,\nвремя, причина ошибки) [async]
+    activate Audit
+    Audit -> Audit : Фиксация в Audit Logging\nдля безопасности
+    deactivate Audit
+    
+    IAM -> Obs : Событие аутентификации\n(correlation_id,\nрезультат: failed, причина)
+    activate Obs
+    Obs -> Obs : Регистрация неудачных попыток
+    deactivate Obs
+    
+    deactivate IdP
+    deactivate IAM
+    deactivate APIGW
+    deactivate Client
+    deactivate User
+    note right: Попытка входа фиксируется\nв Audit Logging для безопасности
+end
+
+== Альтернативный сценарий: обновление токена ==
+alt Истечение срока токена
+    User -> Client : Использует UC-клиент\n(access_token истёк)
+    activate User
+    activate Client
+    
+    Client -> APIGW : Запрос с истёкшим токеном
+    APIGW -> IAM : Валидация токена\n(токен истёк)
+    IAM --> APIGW : Токен истёк\n(401 Unauthorized)
+    
+    APIGW --> Client : Ошибка 401: Токен истёк
+    Client -> APIGW : Обновление токена\n(refresh_token)
+    
+    APIGW -> IAM : Обмен refresh_token\nна новый access_token
+    IAM -> IAM : Валидация refresh_token
+    
+    alt Refresh token валиден
+        IAM -> IAM : Генерация нового access_token
+        IAM --> APIGW : Новый access_token\n(и опционально новый refresh_token)
+        APIGW --> Client : Новый access_token
+        Client -> Client : Сохранение нового токена
+        Client --> User : Продолжение использования\nUC-сервисов
+        
+        IAM -> Obs : Событие обновления токена\n(user_id, correlation_id)
+        deactivate IAM
+        deactivate APIGW
+        deactivate Client
+        deactivate User
+        
+    else Refresh token недоступен
+        IAM --> APIGW : Ошибка: Refresh token недоступен
+        APIGW --> Client : Требуется повторная аутентификация
+        Client --> User : Требуется повторный вход
+        
+        IAM -> Obs : Событие обновления токена\n(correlation_id,\nрезультат: failed, причина)
+        deactivate IAM
+        deactivate APIGW
+        deactivate Client
+        deactivate User
+        note right: Требуется повторная аутентификация
+    end
+end
+
+== Общая наблюдаемость ==
+IAM -> Obs : Метрики аутентификации\n(user_id, correlation_id,\nрезультат, метод, время)
+
+note over User,Obs
+    Все запросы содержат correlation_id.
+    user_id привязывается к токенам и сессиям.
+    События аутентификации зафиксированы в Audit Logging\nи наблюдаемости с correlation_id.
+    Сессия установлена между клиентом и API Gateway.
+end note
+
+deactivate Obs
+
+@enduml

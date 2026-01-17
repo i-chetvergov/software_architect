@@ -1,0 +1,158 @@
+@startuml uc-03
+title UC-03. Чат между сотрудниками (доставка, история, синхронизация устройств)
+
+autonumber
+
+skinparam shadowing false
+skinparam dpi 135
+skinparam ArrowThickness 2
+skinparam ArrowColor #304060
+skinparam ParticipantBorderColor #304060
+skinparam ParticipantBackgroundColor #F8FAFF
+skinparam ActorBorderColor #304060
+skinparam ActorBackgroundColor #FFFFFF
+skinparam NoteBackgroundColor #FFFFEE
+skinparam NoteBorderColor #C0A000
+skinparam defaultTextAlignment left
+skinparam sequenceMessageAlign center
+skinparam legend {
+	BackgroundColor #FFE6EE
+	BorderColor #C0507A
+	FontColor #000000
+}
+
+actor "Пользователь A" as UserA
+actor "Пользователь B" as UserB
+participant "UC-клиенты\n(Web/Mobile/Desktop)" as ClientA
+participant "UC-клиенты\n(Web/Mobile/Desktop)" as ClientB
+participant "API Gateway" as APIGW
+participant "IAM Service" as IAM
+participant "Messaging / Chat Service" as Messaging
+participant "Presence Service" as Presence
+participant "Observability Stack" as Obs
+
+== Открытие диалога и история ==
+UserA -> ClientA : Открывает диалог с Пользователем B
+ClientA -> APIGW : Запрос истории сообщений\n(access token, conversation_id)
+activate ClientA
+activate APIGW
+
+APIGW -> IAM : Валидация токена\n[correlation_id]
+activate IAM
+IAM -> APIGW : OK (user, scopes)\nПроверка rate limit, tenant isolation
+deactivate IAM
+
+APIGW -> Messaging : Получение истории\n(conversation_id, права доступа)
+activate Messaging
+
+Messaging -> Messaging : Проверка прав доступа\nПрименение политик
+Messaging --> ClientA : История сообщений\n(conversation_id, messages)
+deactivate Messaging
+
+ClientA --> UserA : Отображение истории
+deactivate APIGW
+
+== Отправка сообщения ==
+UserA -> ClientA : Вводит и отправляет сообщение
+ClientA -> APIGW : Send message (access token,\nconversation_id, message)\n[correlation_id]
+activate APIGW
+
+APIGW -> IAM : Валидация токена\n[correlation_id]
+activate IAM
+IAM -> APIGW : OK (user, scopes)\nПроверка rate limit, tenant isolation
+deactivate IAM
+
+APIGW -> Messaging : Сохранение сообщения\n(user_id, conversation_id, message)
+activate Messaging
+
+Messaging -> Messaging : Проверка прав и политик\n(запрет типов вложений,\nограничения по размеру)
+Messaging -> Messaging : Сохранение сообщения\nПрисвоение: conversation_id,\nmessage_id, correlation_id
+
+== Доставка получателю ==
+alt Получатель онлайн
+    Messaging -> ClientB : Событие нового сообщения\n(real-time через push/WebSocket)\n[message_id, conversation_id, correlation_id]
+    activate ClientB
+    
+    ClientB --> Messaging : Delivery ack\n(если выбран протокол подтверждений)
+    ClientB --> UserB : Отображение нового сообщения
+    
+    UserB -> ClientB : Прочтение сообщения
+    ClientB -> APIGW : Read receipt\n(message_id, conversation_id)
+    APIGW -> Messaging : Обновление статуса прочтения
+    
+    Messaging -> Messaging : Синхронизация статусов\nдоставки/прочтения между устройствами
+    Messaging -> ClientA : Обновление статусов\n(delivery/read receipts)
+    ClientA --> UserA : Отображение статусов
+
+else Получатель offline
+    Messaging -> Messaging : Событие ставится в очередь доставки
+    note right: Сообщение доступно при следующем подключении
+    
+    opt Подключение получателя
+        UserB -> ClientB : Подключается к платформе
+        ClientB -> APIGW : Синхронизация истории\n(access token, conversation_id)
+        APIGW -> Messaging : Запрос новых сообщений
+        
+        Messaging -> Messaging : Доставка отложенных сообщений
+        Messaging --> ClientB : Новые сообщения\n[message_id, conversation_id, correlation_id]
+        ClientB --> UserB : Отображение новых сообщений
+        
+        ClientB --> Messaging : Delivery ack
+    end
+end
+
+== Обновление Presence ==
+Presence -> Presence : Обновление статусов доступности\n(online/busy/away/offline)\nнезависимо от статусов доставки
+Presence -> ClientA : Статус доступности UserB\n(для UI)
+Presence -> ClientB : Статус доступности UserA\n(для UI)
+
+== Синхронизация между устройствами ==
+par Синхронизация на устройствах UserA
+    Messaging -> ClientA : Обновление статусов доставки/прочтения\nна всех устройствах
+end
+
+par Синхронизация на устройствах UserB
+    Messaging -> ClientB : Обновление истории и статусов\nна всех устройствах
+end
+
+== Альтернативные сценарии ==
+alt Ограничение политики хранения
+    Messaging -> Messaging : Проверка retention политики
+    opt Истечение retention
+        Messaging -> Messaging : Удаление/архивирование сообщения\nСогласно политике (NFR-09)
+        Messaging -> Obs : Факт удаления фиксируется в аудите\n(если необходимо)
+    end
+    note right: При необходимости фиксируется в аудите
+end
+
+alt Перегрузка сервиса
+    Messaging --> ClientA : Ошибка: Сервис недоступен
+    ClientA -> ClientA : Сообщение в локальной очереди\nПовтор отправки с экспоненциальной задержкой
+    ClientA -> Obs : Событие перегрузки\n(для наблюдаемости)
+    note right: Повтор отправки с экспоненциальной задержкой
+end
+
+== Интеграции ==
+opt Интеграции включены (FR-06)
+    Messaging -> Obs : Событие сообщения\nдоступно для интеграций\nпо контракту
+end
+
+== Общая наблюдаемость ==
+Messaging -> Obs : Метрики сообщений\n(conversation_id, correlation_id,\nвремя доставки, ошибки)
+Presence -> Obs : Метрики Presence\n(статусы пользователей)
+
+deactivate Messaging
+deactivate ClientA
+deactivate ClientB
+deactivate APIGW
+deactivate Presence
+
+note over UserA,Obs
+    Все запросы содержат correlation_id.
+    conversation_id, message_id привязываются к user_id, device_id.
+    Статусы доставки/прочтения синхронизируются между устройствами.
+    История согласована между всеми устройствами пользователей.
+    События доступны для интеграций по контракту FR-06.
+end note
+
+@enduml

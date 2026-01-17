@@ -1,0 +1,415 @@
+@startuml nosql_database
+title Схема нереляционных хранилищ "Платформа Унифицированных Коммуникаций" (логический уровень)
+
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+left to right direction
+
+skinparam backgroundColor #FFFFFF
+skinparam legendBackgroundColor #EEEBDC
+skinparam legendBorderColor #2D3E50
+
+skinparam package {
+  BackgroundColor #F5F5F5
+  BorderColor #424242
+}
+
+' ============ OBJECT STORAGE ============
+
+package "Object Storage\n(S3-совместимое)\nДомен: Медиа-файлы и записи" {
+
+  class recording_bucket {
+    + bucket_name : text
+    + region : text
+    + storage_class : text    ' standard / glacier / deep_archive
+    + lifecycle_policy : jsonb
+    + encryption : text       ' SSE-S3 / SSE-KMS
+  }
+
+  note right of recording_bucket
+    Бакет recording_bucket — хранилище записей разговоров.
+    Организован по структуре:
+    - recordings/{call_id}/{session_id}/audio.mp3
+    - recordings/{call_id}/{session_id}/video.mp4
+    - recordings/{call_id}/{session_id}/transcript.json
+    
+    Поле storage_class определяет класс хранения:
+    - standard — для активного доступа
+    - glacier — для архивного хранения
+    - deep_archive — для долгосрочного хранения
+    
+    Поле lifecycle_policy содержит правила автоматического
+    перемещения объектов между классами хранения и удаления
+    по истечении retention периода.
+    
+    Используется Media/Recording Service для записи
+    и Billing/CDR Service для долгосрочного хранения.
+  end note
+
+  class media_assets_bucket {
+    + bucket_name : text
+    + region : text
+    + storage_class : text
+    + cdn_enabled : boolean
+  }
+
+  note right of media_assets_bucket
+    Бакет media_assets_bucket — хранилище медиа-ассетов.
+    Содержит:
+    - голосовые сообщения
+    - файлы, отправленные в чатах
+    - аватары пользователей
+    - превью записей
+    
+    Поле cdn_enabled указывает на интеграцию с CDN
+    для ускорения доступа к медиа-файлам.
+    
+    Используется Messaging Service и Media Service
+    для хранения и доставки медиа-контента.
+  end note
+
+  class object_metadata {
+    + object_key : text
+    + bucket_name : text
+    + FK_call_id : uuid
+    + FK_account_id : uuid
+    + content_type : text
+    + size_bytes : bigint
+    + created_at : timestamp
+    + expires_at : timestamp
+    + access_policy : jsonb
+  }
+
+  note right of object_metadata
+    Метаданные объектов в Object Storage.
+    Хранятся в PostgreSQL (DB_CDR или отдельная таблица)
+    для быстрого поиска и управления доступом.
+    
+    Поле object_key — полный путь к объекту в бакете.
+    Поле access_policy содержит политики доступа (IAM policies)
+    для временных ссылок и контроля прав.
+    
+    Поле expires_at определяет срок действия объекта
+    для автоматического удаления по retention политикам.
+    
+    Используется для каталогизации записей и медиа-файлов
+    без необходимости сканирования всего бакета.
+  end note
+}
+
+' ============ REDIS (KEY-VALUE) ============
+
+package "Redis\n(Key-Value Store)\nДомен: Кэш и временные данные" {
+
+  class session_cache {
+    + key_pattern : text      ' session:{session_id}
+    + value_type : text      ' hash
+    + fields : text
+    + ttl_sec : integer
+  }
+
+  note right of session_cache
+    Redis структура session_cache — кэш активных сессий вызовов.
+    Ключ: session:{session_id}
+    Значение: hash с полями:
+    - call_id, account_id, device_id
+    - status, started_at, last_activity
+    - routing_info (JSON)
+    
+    TTL устанавливается в зависимости от типа сессии
+    (обычно 1-24 часа).
+    
+    Используется Call Control Service для быстрого доступа
+    к информации о сессиях без запросов к PostgreSQL.
+  end note
+
+  class token_cache {
+    + key_pattern : text      ' token:{token_hash}
+    + value_type : text       ' string
+    + ttl_sec : integer
+  }
+
+  note right of token_cache
+    Redis структура token_cache — кэш токенов доступа.
+    Ключ: token:{token_hash}
+    Значение: JSON с данными токена:
+    - account_id, scopes, issued_at, expires_at
+    
+    TTL соответствует времени жизни токена
+    (обычно 15-60 минут для access tokens).
+    
+    Используется IAM Service для валидации токенов
+    без обращения к базе данных при каждом запросе.
+  end note
+
+  class presence_cache {
+    + key_pattern : text      ' presence:{account_id}
+    + value_type : text       ' hash
+    + ttl_sec : integer
+  }
+
+  note right of presence_cache
+    Redis структура presence_cache — кэш статусов presence.
+    Ключ: presence:{account_id}
+    Значение: hash с полями:
+    - status (available/busy/away/offline)
+    - status_message, last_seen
+    - device_statuses (JSON)
+    
+    TTL устанавливается в зависимости от активности
+    (обычно 5-30 минут).
+    
+    Используется Presence Service для быстрого получения
+    статусов пользователей и уведомления подписчиков
+    об изменениях.
+  end note
+
+  class active_chats_cache {
+    + key_pattern : text      ' chat:{conversation_id}:active
+    + value_type : text       ' sorted set
+    + ttl_sec : integer
+  }
+
+  note right of active_chats_cache
+    Redis структура active_chats_cache — кэш активных чатов.
+    Ключ: chat:{conversation_id}:active
+    Значение: sorted set с участниками и временем последней активности.
+    
+    Используется для:
+    - быстрого определения активных участников
+    - доставки сообщений только активным пользователям
+    - управления WebSocket соединениями
+    
+    TTL устанавливается при отсутствии активности
+    (обычно 1-5 минут).
+    
+    Используется Messaging Service для оптимизации
+    доставки сообщений.
+  end note
+
+  class rate_limit_cache {
+    + key_pattern : text      ' ratelimit:{account_id}:{endpoint}
+    + value_type : text       ' counter
+    + ttl_sec : integer
+  }
+
+  note right of rate_limit_cache
+    Redis структура rate_limit_cache — счётчики rate limiting.
+    Ключ: ratelimit:{account_id}:{endpoint}
+    Значение: счётчик запросов с TTL.
+    
+    Используется API Gateway для ограничения частоты запросов
+    и защиты от злоупотреблений.
+    
+    TTL соответствует окну rate limiting
+    (обычно 1-60 секунд).
+  end note
+}
+
+' ============ TIME-SERIES DATABASE ============
+
+package "Time-Series Database\n(Prometheus / TSDB)\nДомен: Метрики и телеметрия" {
+
+  class metrics_series {
+    + metric_name : text
+    + labels : map<string, string>
+    + timestamp : timestamp
+    + value : numeric
+  }
+
+  note right of metrics_series
+    Time-series структура metrics_series — метрики системы.
+    Хранит временные ряды метрик с labels:
+    - call_control_calls_total{status="answered", direction="inbound"}
+    - webrtc_gateway_connections_active{region="eu-1"}
+    - api_gateway_requests_duration_seconds{endpoint="/calls", method="POST"}
+    - media_recording_duration_seconds{codec="opus"}
+    
+    Используется Observability Stack для:
+    - мониторинга производительности
+    - построения графиков и дашбордов
+    - генерации алёртов при превышении порогов
+    
+    Retention период зависит от важности метрики
+    (обычно 15 дней для детальных, 1 год для агрегированных).
+  end note
+
+  class call_quality_metrics {
+    + metric_name : text
+    + call_id : text
+    + timestamp : timestamp
+    + rtt_ms : numeric
+    + packet_loss_percent : numeric
+    + jitter_ms : numeric
+    + mos_score : numeric
+  }
+
+  note right of call_quality_metrics
+    Time-series структура call_quality_metrics — метрики качества вызовов.
+    Хранит технические метрики качества связи:
+    - RTT (Round-Trip Time) в миллисекундах
+    - процент потери пакетов
+    - джиттер в миллисекундах
+    - MOS (Mean Opinion Score) — оценка качества
+    
+    Используется для:
+    - анализа качества связи по регионам/операторам
+    - диагностики проблем с медиа-потоками
+    - оптимизации маршрутизации вызовов
+    
+    Retention период: 30-90 дней для детального анализа.
+  end note
+}
+
+' ============ LOG STORAGE ============
+
+package "Log Storage\n(Loki / Elasticsearch)\nДомен: Логи и аудит" {
+
+  class application_logs {
+    + log_level : text        ' DEBUG / INFO / WARN / ERROR
+    + service_name : text
+    + timestamp : timestamp
+    + message : text
+    + fields : jsonb
+  }
+
+  note right of application_logs
+    Структура application_logs — логи приложений.
+    Хранит структурированные логи сервисов:
+    - correlation_id для трассировки запросов
+    - call_id, account_id для контекста
+    - stack traces для ошибок
+    - performance metrics
+    
+    Используется для:
+    - отладки проблем
+    - анализа производительности
+    - аудита действий пользователей
+    
+    Retention период: 7-30 дней для детальных логов,
+    дольше для критических событий.
+  end note
+
+  class audit_logs {
+    + event_type : text
+    + FK_account_id : uuid
+    + action : text
+    + resource_type : text
+    + resource_id : text
+    + timestamp : timestamp
+    + ip_address : text
+    + user_agent : text
+  }
+
+  note right of audit_logs
+    Структура audit_logs — логи аудита безопасности.
+    Хранит события безопасности и доступа:
+    - входы/выходы пользователей
+    - доступ к записям разговоров
+    - изменения конфигурации
+    - административные действия
+    
+    Используется для:
+    - compliance и аудита
+    - расследования инцидентов безопасности
+    - отчётности по доступу к данным
+    
+    Retention период: минимум 1 год (требования compliance),
+    возможно дольше в зависимости от политик.
+  end note
+}
+
+' ============ TRACE STORAGE ============
+
+package "Trace Storage\n(Tempo / Jaeger)\nДомен: Распределённая трассировка" {
+
+  class trace_spans {
+    + trace_id : text
+    + span_id : text
+    + parent_span_id : text
+    + service_name : text
+    + operation_name : text
+    + start_time : timestamp
+    + duration_ms : numeric
+    + tags : map<string, string>
+  }
+
+  note right of trace_spans
+    Структура trace_spans — spans распределённой трассировки.
+    Хранит информацию о выполнении операций:
+    - trace_id — идентификатор всего запроса
+    - span_id — идентификатор отдельной операции
+    - parent_span_id — связь с родительским span
+    - service_name — сервис, выполнивший операцию
+    - operation_name — название операции
+    - duration_ms — длительность выполнения
+    - tags — дополнительные метаданные
+    
+    Используется для:
+    - анализа производительности распределённых запросов
+    - диагностики проблем с задержками
+    - понимания потока выполнения через сервисы
+    
+    Retention период: 7-14 дней для детальной трассировки.
+  end note
+}
+
+' ============ СВЯЗИ И ИНТЕГРАЦИИ ============
+
+' --- Object Storage связи ---
+object_metadata ..> recording_bucket : Ссылается на объекты
+object_metadata ..> media_assets_bucket : Ссылается на объекты
+
+' --- Redis связи (логические) ---
+session_cache ..> call_sessions : Кэширует данные из DB_CALLS
+token_cache ..> accounts : Кэширует данные из DB_ACCOUNTS
+presence_cache ..> presence_status : Кэширует данные из DB_MESSAGING
+active_chats_cache ..> conversations : Кэширует данные из DB_MESSAGING
+
+' --- Time-series связи (логические) ---
+metrics_series ..> call_sessions : Метрики по вызовам
+call_quality_metrics ..> call_sessions : Метрики качества по вызовам
+
+' --- Log/Trace связи (логические) ---
+application_logs ..> call_sessions : Логи по вызовам
+audit_logs ..> accounts : Логи аудита по аккаунтам
+trace_spans ..> call_sessions : Трейсы по вызовам
+
+' ============ ОБЩЕЕ ПРИМЕЧАНИЕ ============
+
+note bottom
+  Нереляционные хранилища в UC-платформе:
+  
+  Object Storage (S3-совместимое):
+  - recording_bucket — записи разговоров
+  - media_assets_bucket — медиа-файлы и ассеты
+  - Метаданные объектов хранятся в PostgreSQL для поиска
+  
+  Redis (Key-Value):
+  - session_cache — кэш активных сессий вызовов
+  - token_cache — кэш токенов доступа
+  - presence_cache — кэш статусов presence
+  - active_chats_cache — кэш активных чатов
+  - rate_limit_cache — счётчики rate limiting
+  
+  Time-Series Database:
+  - metrics_series — системные метрики
+  - call_quality_metrics — метрики качества вызовов
+  
+  Log Storage:
+  - application_logs — логи приложений
+  - audit_logs — логи аудита безопасности
+  
+  Trace Storage:
+  - trace_spans — spans распределённой трассировки
+  
+  Особенности:
+  - Все нереляционные хранилища используются для оптимизации
+    производительности и хранения специализированных данных
+  - Метаданные и индексы могут храниться в PostgreSQL
+    для быстрого поиска и управления доступом
+  - Retention политики определяются требованиями compliance
+    и бизнес-логикой (ADR-010)
+end note
+
+@enduml

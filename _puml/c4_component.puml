@@ -1,0 +1,109 @@
+@startuml c4_component
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+skinparam backgroundColor #FFFFFF
+skinparam legendBackgroundColor #EEEBDC
+skinparam legendBorderColor #2D3E50
+
+skinparam linetype ortho
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultTextAlignment center
+left to right direction
+
+title "Call Control Service — Компонентная диаграмма"
+
+' ============ АКТЁРЫ И КОНТЕЙНЕРЫ ============
+
+Person(corpUser, "Корпоративный пользователь", "Сотрудник, использующий UC-платформу")
+
+System_Ext(ucClients, "UC Clients", "Веб-клиент, мобильные приложения")
+Container(apiGateway, "API Gateway", "HTTPS, REST", "API-шлюз")
+Container(callControlService, "Call Control Service", "HTTP, gRPC, SIP", "Управление вызовами и маршрутизация")
+
+Container_Ext(sipGw, "SIP Gateway / SBC", "SIP", "Session Border Controller")
+Container_Ext(webrtcGw, "WebRTC Gateway", "WebRTC, WebTransport", "WebRTC шлюз")
+Container_Ext(iam, "IAM Service", "OIDC, SAML 2.0", "Сервис аутентификации")
+Container_Ext(billing, "Billing / CDR Service", "Events", "Сервис биллинга")
+Container_Ext(presence, "Presence Service", "Events", "Сервис presence")
+
+SystemDb_Ext(dbCalls, "БД вызовов", "PostgreSQL", "Хранилище вызовов и сессий")
+SystemDb_Ext(cache, "Кэш", "Redis", "Кэширование сессий и маршрутизации")
+SystemDb_Ext(messageQueue, "Очередь сообщений", "Kafka / RabbitMQ", "Брокер сообщений")
+
+' ============ КОМПОНЕНТЫ CALL CONTROL SERVICE ============
+
+Container_Boundary(callControlBoundary, "Call Control Service") {
+    Component(callOrchestrator, "Call Orchestrator", "Java / Go", "Оркестрация жизненного цикла вызовов")
+    Component(routingEngine, "Routing Engine", "Java / Go", "Маршрутизация вызовов по правилам")
+    Component(sessionManager, "Session Manager", "Java / Go", "Управление активными сессиями вызовов")
+    Component(sipHandler, "SIP Handler", "Java / Go", "Обработка SIP-сообщений")
+    Component(webrtcHandler, "WebRTC Handler", "Java / Go", "Обработка WebRTC-сигнализации")
+    Component(cdrCollector, "CDR Collector", "Java / Go", "Сбор данных для CDR")
+    ComponentDb(callRepository, "Call Repository", "JPA / SQL", "Доступ к данным вызовов")
+    Component(cacheAdapter, "Cache Adapter", "Redis Client", "Доступ к кэшу")
+}
+
+' ============ ВЗАИМОДЕЙСТВИЯ ============
+
+Rel(corpUser, ucClients, "Использует", "Инициация вызова")
+Rel(ucClients, apiGateway, "HTTPS/JSON", "REST запросы")
+Rel(apiGateway, callOrchestrator, "HTTP/gRPC", "Создание/управление вызовом")
+
+' Внутренние взаимодействия
+Rel(callOrchestrator, routingEngine, "gRPC", "Запрос маршрутизации")
+Rel(callOrchestrator, sessionManager, "gRPC", "Создание/обновление сессии")
+Rel(routingEngine, callRepository, "Repository", "Чтение правил маршрутизации")
+Rel(routingEngine, cacheAdapter, "Redis", "Кэш маршрутизации")
+Rel(sessionManager, callRepository, "Repository", "Сохранение состояния сессии")
+Rel(sessionManager, cacheAdapter, "Redis", "Кэш активных сессий")
+
+Rel(callOrchestrator, sipHandler, "gRPC", "Обработка SIP-запросов")
+Rel(sipHandler, sipGw, "SIP", "SIP-сообщения")
+Rel(sipGw, sipHandler, "SIP", "SIP-ответы")
+
+Rel(callOrchestrator, webrtcHandler, "gRPC", "Обработка WebRTC-сигнализации")
+Rel(webrtcHandler, webrtcGw, "WebRTC", "WebRTC-сигнализация")
+Rel(webrtcGw, webrtcHandler, "WebRTC", "WebRTC-ответы")
+
+Rel(callOrchestrator, iam, "gRPC", "Валидация токенов")
+Rel(cdrCollector, billing, "Events", "CDR события [async]")
+Rel(cdrCollector, presence, "Events", "События изменения состояния [async]")
+
+Rel(cdrCollector, callRepository, "Repository", "Запись CDR данных")
+Rel(callRepository, dbCalls, "SQL", "Вызовы, сессии, маршрутизация")
+Rel(cacheAdapter, cache, "Redis", "Кэш сессий, токенов, маршрутизации")
+Rel(cdrCollector, messageQueue, "Events", "CDR события [async]")
+
+' ============ ПРИМЕЧАНИЯ ============
+
+note right of callOrchestrator
+    Call Orchestrator — основной компонент:
+    - Управляет жизненным циклом вызова
+    - Координирует взаимодействие компонентов
+    - Применяет бизнес-логику вызовов
+end note
+
+note bottom of routingEngine
+    Routing Engine:
+    - Применяет правила маршрутизации
+    - Определяет маршрут для входящих/исходящих вызовов
+    - Учитывает presence и доступность пользователей
+end note
+
+note bottom of sessionManager
+    Session Manager:
+    - Управляет активными сессиями
+    - Отслеживает состояние вызовов
+    - Обеспечивает идемпотентность операций
+end note
+
+note right of cdrCollector
+    CDR Collector:
+    - Асинхронно собирает данные вызовов
+    - Формирует CDR записи
+    - Отправляет события в биллинг и presence
+end note
+
+SHOW_LEGEND()
+
+@enduml

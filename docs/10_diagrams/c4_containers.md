@@ -1,6 +1,6 @@
 # C4 Container Diagram
 
-![C4 Container Diagram](../assets/diagrams/C4_Containers_UC_Platform.svg)
+![C4 Container Diagram](../assets/diagrams/c4_containers.svg)
 
 ## Назначение диаграммы
 

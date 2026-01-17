@@ -131,8 +131,10 @@ nav:
   - Обзор: 10_diagrams/index.md
   - C4 Контекст: 10_diagrams/c4_context.md
   - C4 Контейнеры: 10_diagrams/c4_containers.md
+  - C4 Компоненты: 10_diagrams/c4_component.md
   - Развёртывание: 10_diagrams/deployment.md
-  - Sequence: 10_diagrams/sequences.md
+  - Схема баз данных: 10_diagrams/database_diagram.md
+  - Нереляционные хранилища: 10_diagrams/nosql_database.md
 
 - Принятые архитектурные решения (ADL):
   - ADL: adl/index.md

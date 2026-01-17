@@ -1,6 +1,6 @@
 # Deployment Diagram
 
-![Deployment Diagram](../assets/diagrams/Deployment_UC_Platform.svg)
+![Deployment Diagram](../assets/diagrams/deployment.svg)
 
 ## Назначение диаграммы
 

@@ -1,6 +1,6 @@
 # C4 Context Diagram
 
-![C4 Context Diagram](../assets/diagrams/C4_Context_UC_Platform.svg)
+![C4 Context Diagram](../assets/diagrams/c4_context.svg)
 
 ## Назначение диаграммы
 

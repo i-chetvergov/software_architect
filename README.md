@@ -131,6 +131,45 @@ mkdocs build --clean --strict
 docs/assets/diagrams/
 ```
 
+### Экспорт диаграмм (PlantUML → SVG)
+
+Для автоматического экспорта всех диаграмм из `_puml/` в SVG используется скрипт `export_diagrams.sh`.
+
+**Требования:**
+- Установленный **PlantUML** (установка: `brew install plantuml`)
+
+**Запуск скрипта:**
+
+Перейдите в корень проекта и выполните:
+
+```bash
+./export_diagrams.sh
+```
+
+Или с указанием полного пути к скрипту:
+
+```bash
+cd /path/to/project
+./export_diagrams.sh
+```
+
+Скрипт выполняет следующие действия:
+
+1. Проверяет наличие PlantUML
+2. Удаляет все существующие SVG файлы из `docs/assets/diagrams/`
+3. Экспортирует все `.puml` файлы из `_puml/` в SVG
+4. Сохраняет SVG файлы в `docs/assets/diagrams/`
+5. Выводит отчёт о количестве обработанных файлов
+
+**Обрабатываемые файлы:**
+- `uc-01.puml` ... `uc-09.puml` (Use Cases)
+- `c4_context.puml` (C4 Context)
+- `c4_containers.puml` (C4 Containers)
+- `deployment.puml` (Deployment)
+- `sequences.puml` (Sequence)
+
+После выполнения скрипта все SVG файлы обновляются в соответствии с текущими `.puml` исходниками.
+
 ### Ссылки на диаграммы в Markdown
 
 В страницах `docs/10_diagrams/*.md` используются относительные ссылки, например:
@@ -173,10 +212,16 @@ Settings → Pages → Source: GitHub Actions
 
 ## Быстрая памятка команд
 
+**Установка и запуск:**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 mkdocs serve
 mkdocs build --clean --strict
+```
+
+**Экспорт диаграмм (PlantUML → SVG):**
+```bash
+./export_diagrams.sh
 ```
