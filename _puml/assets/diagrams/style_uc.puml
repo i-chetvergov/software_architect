@@ -1,0 +1,39 @@
+' Стиль оформления UseCase диаграммы
+!theme plain
+
+' Настройка прямоугольника (области, в которой находятся Use Case)
+skinparam rectangle {
+    BackgroundColor #FFFFFF
+    BorderColor #000000
+    FontName Arial
+    FontSize 14
+    FontColor #000000
+    RoundCorner 15
+}
+
+' Настройка актёров (User A, User B)
+skinparam actor {
+    BackgroundColor #FDF5E6
+    BorderColor #000000
+    FontColor #000000
+    FontName Arial
+    FontSize 14
+}
+
+' Настройка Use Case (овалы)
+skinparam usecase {
+    BackgroundColor #B9DAF2
+    BorderColor #000000
+    FontColor #000000
+    FontName Arial
+    FontSize 14
+    RoundCorner 25
+}
+
+skinparam note {
+    BackgroundColor LightYellow
+    BorderColor Black
+    FontColor Black
+}
+
+left to right direction

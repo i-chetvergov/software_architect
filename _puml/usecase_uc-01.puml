@@ -1,0 +1,67 @@
+@startuml usecase_uc-01
+!include assets/diagrams/style_uc.puml
+
+title Use Case диаграмма: Корпоративный пользователь
+
+actor "Корпоративный пользователь" as User
+
+rectangle "Платформа Унифицированных Коммуникаций" {
+  usecase "Аутентификация и получение токена (SSO)" as UC_Auth
+  usecase "Исходящий голосовой вызов" as UC_OutgoingCall
+  usecase "Входящий вызов" as UC_IncomingCall
+  usecase "Видеоконференция" as UC_Conference
+  usecase "Чат с сотрудниками" as UC_Chat
+  usecase "Управление несколькими устройствами" as UC_MultiDevice
+  usecase "Просмотр истории сообщений" as UC_MessageHistory
+  usecase "Управление контактами" as UC_Contacts
+  usecase "Просмотр статусов presence" as UC_Presence
+  usecase "Доступ к записям разговоров" as UC_Recordings
+  usecase "Интеграция с CRM (click-to-call)" as UC_CRMIntegration
+}
+
+' Основные связи
+User --> UC_Auth
+User --> UC_OutgoingCall
+User --> UC_IncomingCall
+User --> UC_Conference
+User --> UC_Chat
+User --> UC_MultiDevice
+User --> UC_MessageHistory
+User --> UC_Contacts
+User --> UC_Presence
+User --> UC_Recordings
+User --> UC_CRMIntegration
+
+' Зависимости
+UC_OutgoingCall ..> UC_Auth : <<include>>
+UC_IncomingCall ..> UC_Auth : <<include>>
+UC_Conference ..> UC_Auth : <<include>>
+UC_Chat ..> UC_Auth : <<include>>
+UC_Recordings ..> UC_Auth : <<include>>
+UC_CRMIntegration ..> UC_Auth : <<include>>
+
+UC_Conference ..> UC_Chat : <<include>>
+UC_Chat ..> UC_Presence : <<include>>
+UC_MessageHistory ..> UC_Chat : <<extend>>
+
+note right of UC_Auth
+  Аутентификация через корпоративный IdP
+  (OIDC/SAML 2.0, SSO)
+end note
+
+note right of UC_OutgoingCall
+  Исходящий вызов через WebRTC
+  с маршрутизацией на SIP/PSTN
+end note
+
+note right of UC_Conference
+  Создание и участие в видеоконференциях
+  с поддержкой чата и записи
+end note
+
+note right of UC_MultiDevice
+  Синхронизация состояния между
+  несколькими устройствами пользователя
+end note
+
+@enduml

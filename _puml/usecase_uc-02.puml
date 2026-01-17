@@ -1,0 +1,42 @@
+@startuml usecase_uc-02
+!include assets/diagrams/style_uc.puml
+
+title Use Case диаграмма: Внешний пользователь
+
+actor "Внешний пользователь" as ExternalUser
+
+rectangle "Платформа Унифицированных Коммуникаций" {
+  usecase "Подключение по ссылке" as UC_JoinByLink
+  usecase "Участие в видеоконференции" as UC_JoinConference
+  usecase "Участие в голосовом вызове" as UC_JoinCall
+  usecase "Доступ к чату конференции" as UC_ConferenceChat
+}
+
+' Основные связи
+ExternalUser --> UC_JoinByLink
+ExternalUser --> UC_JoinConference
+ExternalUser --> UC_JoinCall
+ExternalUser --> UC_ConferenceChat
+
+' Зависимости
+UC_JoinConference ..> UC_JoinByLink : <<include>>
+UC_JoinCall ..> UC_JoinByLink : <<include>>
+UC_ConferenceChat ..> UC_JoinConference : <<include>>
+
+note right of UC_JoinByLink
+  Подключение через приложение
+  или браузер по предоставленной ссылке
+  Без необходимости регистрации
+end note
+
+note right of UC_JoinConference
+  Внешний пользователь может присоединиться
+  к видеоконференции по ссылке
+end note
+
+note right of UC_JoinCall
+  Внешний пользователь может принять
+  входящий вызов от корпоративного пользователя
+end note
+
+@enduml

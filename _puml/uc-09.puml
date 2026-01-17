@@ -32,10 +32,10 @@ participant "Presence Service" as Presence
 participant "SIP Gateway / SBC" as SIPEdge
 participant "Observability Stack" as Obs
 
-== Поступление входящего вызова ==
-participant "Внешний абонент" as Caller
+actor "Внешний пользователь" as Caller
 participant "PSTN/SIP-транк" as PSTN
 
+== Поступление входящего вызова ==
 Caller -> PSTN : Набирает номер пользователя
 PSTN -> SIPEdge : SIP INVITE\n(входящий вызов) [или создание внутри домена]
 activate Caller
@@ -131,7 +131,10 @@ else Пользователь отвечает на SIP-устройстве
         deactivate ClientDesktop
     end
     
-    ... (установление соединения аналогично) ...
+    CallControl -> SIPEdge : SIP 200 OK (для Caller)
+    SIPEdge -> PSTN : SIP 200 OK
+    PSTN --> Caller : Соединение установлено
+    
     deactivate SIPDevice
     deactivate SIPEdge
     deactivate PSTN

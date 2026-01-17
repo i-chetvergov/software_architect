@@ -1,0 +1,63 @@
+@startuml usecase_uc-04
+!include assets/diagrams/style_uc.puml
+
+title Use Case диаграмма: Офицер информационной безопасности
+
+actor "Офицер информационной безопасности" as SecurityOfficer
+
+rectangle "Платформа Унифицированных Коммуникаций" {
+  usecase "Мониторинг безопасности" as UC_SecurityMonitoring
+  usecase "Аудит доступа к данным" as UC_AccessAudit
+  usecase "Управление политиками ИБ" as UC_SecurityPolicies
+  usecase "Просмотр логов безопасности" as UC_SecurityLogs
+  usecase "Доступ к записям для аудита" as UC_RecordingAudit
+  usecase "Анализ инцидентов безопасности" as UC_IncidentAnalysis
+  usecase "Управление правами доступа (RBAC/ABAC)" as UC_AccessControl
+  usecase "Интеграция с SIEM" as UC_SIEMIntegration
+  usecase "Генерация отчётов по безопасности" as UC_SecurityReports
+}
+
+' Основные связи
+SecurityOfficer --> UC_SecurityMonitoring
+SecurityOfficer --> UC_AccessAudit
+SecurityOfficer --> UC_SecurityPolicies
+SecurityOfficer --> UC_SecurityLogs
+SecurityOfficer --> UC_RecordingAudit
+SecurityOfficer --> UC_IncidentAnalysis
+SecurityOfficer --> UC_AccessControl
+SecurityOfficer --> UC_SIEMIntegration
+SecurityOfficer --> UC_SecurityReports
+
+' Зависимости
+UC_AccessAudit ..> UC_SecurityLogs : <<include>>
+UC_IncidentAnalysis ..> UC_SecurityLogs : <<include>>
+UC_IncidentAnalysis ..> UC_RecordingAudit : <<include>>
+UC_SecurityReports ..> UC_SecurityLogs : <<include>>
+UC_SecurityReports ..> UC_AccessAudit : <<include>>
+
+note right of UC_SecurityMonitoring
+  Мониторинг событий безопасности
+  в реальном времени через
+  Observability Stack
+end note
+
+note right of UC_AccessAudit
+  Аудит всех попыток доступа
+  к чувствительным данным
+  (записи, CDR, конфигурации)
+end note
+
+note right of UC_SecurityPolicies
+  Управление политиками безопасности:
+  - Политики доступа к записям
+  - Политики retention данных
+  - Политики шифрования
+end note
+
+note right of UC_SIEMIntegration
+  Интеграция с корпоративным SIEM
+  для централизованного мониторинга
+  и анализа безопасности
+end note
+
+@enduml

@@ -1,0 +1,63 @@
+@startuml usecase_uc-03
+!include assets/diagrams/style_uc.puml
+
+title Use Case диаграмма: Администратор UC
+
+actor "Администратор UC" as Admin
+
+rectangle "Платформа Унифицированных Коммуникаций" {
+  usecase "Управление пользователями" as UC_ManageUsers
+  usecase "Управление номерами" as UC_ManageNumbers
+  usecase "Управление политиками доступа" as UC_ManagePolicies
+  usecase "Управление маршрутизацией" as UC_ManageRouting
+  usecase "Управление очередями вызовов" as UC_ManageQueues
+  usecase "Конфигурация системы" as UC_ConfigureSystem
+  usecase "Управление интеграциями" as UC_ManageIntegrations
+  usecase "Просмотр метрик и отчётов" as UC_ViewReports
+  usecase "Управление версиями конфигурации" as UC_ConfigVersioning
+  usecase "Откат конфигурации" as UC_ConfigRollback
+}
+
+' Основные связи
+Admin --> UC_ManageUsers
+Admin --> UC_ManageNumbers
+Admin --> UC_ManagePolicies
+Admin --> UC_ManageRouting
+Admin --> UC_ManageQueues
+Admin --> UC_ConfigureSystem
+Admin --> UC_ManageIntegrations
+Admin --> UC_ViewReports
+Admin --> UC_ConfigVersioning
+Admin --> UC_ConfigRollback
+
+' Зависимости
+UC_ManageUsers ..> UC_ConfigureSystem : <<include>>
+UC_ManageNumbers ..> UC_ConfigureSystem : <<include>>
+UC_ManagePolicies ..> UC_ConfigureSystem : <<include>>
+UC_ManageRouting ..> UC_ConfigureSystem : <<include>>
+UC_ManageQueues ..> UC_ConfigureSystem : <<include>>
+UC_ConfigRollback ..> UC_ConfigVersioning : <<include>>
+
+note right of UC_ManageUsers
+  Создание, изменение, удаление пользователей
+  Назначение ролей и групп
+  Интеграция с корпоративным каталогом
+end note
+
+note right of UC_ManageRouting
+  Настройка правил маршрутизации вызовов
+  Конфигурация очередей и групп
+end note
+
+note right of UC_ConfigVersioning
+  Версионирование конфигураций
+  с возможностью отката изменений
+end note
+
+note right of UC_ViewReports
+  Просмотр метрик производительности,
+  статистики использования,
+  отчётов по CDR
+end note
+
+@enduml
