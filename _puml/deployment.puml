@@ -29,34 +29,34 @@ skinparam artifact {
 
 ' ============ КЛИЕНТ И ИНТЕРНЕТ ============
 
-node "Устройство пользователя\n(ПК / ноутбук / мобильное)" as client_node {
+node "Устройство пользователя\n(ПК / ноутбук / мобильное)" as client_node #E3F2FD {
   artifact "Браузер / UC Client\n(WebRTC, WebTransport)" as browser_client
 }
 
-cloud "Интернет / CDN" as internet {
-  node "CDN статики\nи медиа-ассетов" as cdn_node
+cloud "Интернет / CDN" as internet #FFF3E0 {
+  node "CDN статики\nи медиа-ассетов" as cdn_node #FFE0B2
 }
 
 ' ============ ОБЛАЧНЫЙ РЕГИОН ============
 
-cloud "Облачный провайдер\nRegion EU-1" as cloud {
+cloud "Облачный провайдер\nRegion EU-1" as cloud #E0E0E0 {
 
   ' ---- Публичная подсеть ----
-  node "Публичная подсеть\n(L7 балансировщик / периметр)" as public_net {
-    node "Ingress Controller / Load Balancer\n(ingress)" as ingress_node {
+  node "Публичная подсеть\n(L7 балансировщик / периметр)" as public_net #FFEBEE {
+    node "Ingress Controller / Load Balancer\n(ingress)" as ingress_node #FFCDD2 {
       artifact "api-gateway\n+ webrtc-gateway" as ingress_art
     }
   }
 
   ' ---- Приватная подсеть: приложения ----
-  node "Приватная подсеть\nKubernetes-кластер (apps)" as k8s_app {
+  node "Приватная подсеть\nKubernetes-кластер (apps)" as k8s_app #E8F5E9 {
 
-    node "Namespace: uc-gateway" as ns_gateway {
+    node "Namespace: uc-gateway" as ns_gateway #C8E6C9 {
       artifact "api-gateway-pod\nAPI Gateway" as pod_gateway
       artifact "webrtc-gateway-pod\nWebRTC Gateway" as pod_webrtc
     }
 
-    node "Namespace: uc-core" as ns_core {
+    node "Namespace: uc-core" as ns_core #BBDEFB {
       artifact "iam-pod\nIAM / Identity Service" as pod_iam
       artifact "call-control-pod\nCall Control Service" as pod_call_control
       artifact "sip-gw-pod\nSIP Gateway / SBC" as pod_sipgw
@@ -67,11 +67,11 @@ cloud "Облачный провайдер\nRegion EU-1" as cloud {
       artifact "notify-pod\nNotification Service" as pod_notify
     }
 
-    node "Namespace: uc-media" as ns_media {
+    node "Namespace: uc-media" as ns_media #F3E5F5 {
       artifact "media-rec-pod\nMedia / Recording Service\n(медиасерверы)" as pod_media
     }
 
-    node "Namespace: uc-observability" as ns_obs {
+    node "Namespace: uc-observability" as ns_obs #FFF9C4 {
       artifact "metrics-pod\nPrometheus / TSDB" as pod_metrics
       artifact "logs-pod\nLoki / Elasticsearch" as pod_logs
       artifact "traces-pod\nTempo / Jaeger" as pod_traces
@@ -80,24 +80,24 @@ cloud "Облачный провайдер\nRegion EU-1" as cloud {
   }
 
   ' ---- Приватная подсеть: данные ----
-  node "Приватная подсеть\nСлой данных" as data_net {
+  node "Приватная подсеть\nСлой данных" as data_net #FFF8E1 {
 
-    node "PostgreSQL HA-кластер" as pg_cluster {
+    node "PostgreSQL HA-кластер" as pg_cluster #C5E1A5 {
       database "DB_ACCOUNTS\n(аккаунты, профили,\nконфиги, feature_flags)" as db_accounts
       database "DB_CALLS\nвызовы, сессии,\nмаршрутизация" as db_calls
       database "DB_CDR\nCDR записи, биллинг" as db_cdr
       database "DB_MESSAGING\nсообщения, чаты,\npresence" as db_messaging
     }
 
-    node "Redis-кластер\n(кэш / сессии)" as redis_node {
+    node "Redis-кластер\n(кэш / сессии)" as redis_node #FFCCBC {
       artifact "Redis\nкэш сессий, токенов,\npresence, активные чаты" as redis_art
     }
 
-    node "Kafka / RabbitMQ кластер\n(шина событий)" as mq_node {
+    node "Kafka / RabbitMQ кластер\n(шина событий)" as mq_node #CE93D8 {
       artifact "message-bus\nсобытия вызовов,\nбиллинга, служебные события" as mq_art
     }
 
-    node "Object Storage\n(S3-совместимое)" as obj_node {
+    node "Object Storage\n(S3-совместимое)" as obj_node #90CAF9 {
       artifact "Object Storage\nзаписи разговоров,\nмедиа-файлы" as obj_art
     }
   }
@@ -105,11 +105,11 @@ cloud "Облачный провайдер\nRegion EU-1" as cloud {
 
 ' ============ ВНЕШНИЕ СИСТЕМЫ ============
 
-cloud "Identity Provider / IdP\n(Active Directory, Okta, Azure AD)" as idp_cloud
-cloud "CRM / ERP / Service Desk\n(Salesforce, SAP, Jira)" as crm_cloud
-cloud "Email/SMS/Push Gateway\n(уведомления)" as esmsgw_cloud
-cloud "PSTN / Operator SBC\n(операторы фиксированной связи и мобильные операторы)" as pstn_cloud
-cloud "Monitoring / SIEM\n(безопасность)" as siem_cloud
+cloud "Identity Provider / IdP\n(Active Directory, Okta, Azure AD)" as idp_cloud #E1BEE7
+cloud "CRM / ERP / Service Desk\n(Salesforce, SAP, Jira)" as crm_cloud #F8BBD0
+cloud "Email/SMS/Push Gateway\n(уведомления)" as esmsgw_cloud #FFCC80
+cloud "PSTN / Operator SBC\n(операторы фиксированной связи и мобильные операторы)" as pstn_cloud #A5D6A7
+cloud "Monitoring / SIEM\n(безопасность)" as siem_cloud #EF9A9A
 
 ' ============ СОЕДИНЕНИЯ ============
 

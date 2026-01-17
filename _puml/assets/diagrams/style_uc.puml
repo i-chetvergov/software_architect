@@ -36,4 +36,10 @@ skinparam note {
     FontColor Black
 }
 
+' Настройка линий для прямых стрелок
+skinparam linetype ortho
+skinparam arrow {
+    Style ortho
+}
+
 left to right direction

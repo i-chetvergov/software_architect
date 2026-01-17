@@ -114,7 +114,7 @@ nav:
     - UC-02. Внешний пользователь: 11_use_case_diagrams/usecase_uc-02.md
     - UC-03. Администратор UC: 11_use_case_diagrams/usecase_uc-03.md
     - UC-04. Офицер ИБ: 11_use_case_diagrams/usecase_uc-04.md
-  - Диаграммы последовательности сценариев:
+  - Диаграммы последовательности пользовательских сценариев:
     - Обзор: 07_use_cases/index.md
     - UC-01. Исходящий голосовой вызов: 07_use_cases/uc-01.md
     - UC-02. Входящий вызов с маршрутизацией: 07_use_cases/uc-02.md
