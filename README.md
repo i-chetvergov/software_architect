@@ -17,10 +17,11 @@
 - Архитектурные драйверы
 - Ограничения (технологические и бизнесовые)
 - Требования
-- Пользовательские сценарии
+- Use Case диаграммы (UML Use Case для акторов)
+- Диаграммы последовательности сценариев (Sequence)
 - Сценарии атрибутов качества
 - Описание решения
-- Диаграммы (C4 Context, C4 Containers, Deployment, Sequence)
+- Диаграммы (C4 Context, C4 Containers, C4 Components, Deployment, Database, NoSQL)
 - Лог архитектурных решений (ADR/ADL)
 
 ---
@@ -37,16 +38,29 @@ docs/                         # исходники документации MkDo
   04_arch_drivers/            # архитектурные драйверы
   05_constraints/             # ограничения
   06_requirements/            # требования
-  07_use_cases/               # пользовательские сценарии
+  07_use_cases/               # диаграммы последовательности сценариев (Sequence)
   08_quality_scenarios/       # сценарии атрибутов качества
   09_solution/                # описание решения
-  10_diagrams/                # страницы диаграмм
+  10_diagrams/                # страницы диаграмм (C4, Deployment, Database)
+  11_use_case_diagrams/       # Use Case диаграммы (UML Use Case)
   adr/                        # Architecture Decision Records (ADR)
   adl/                        # Architecture Description Language (ADL) / соглашения
   assets/diagrams/            # SVG‑диаграммы, отображаемые в MkDocs
 
+_puml/                        # исходники PlantUML диаграмм
+  uc-01.puml ... uc-09.puml  # диаграммы последовательности сценариев
+  usecase_uc-01.puml ...     # Use Case диаграммы
+  c4_context.puml             # C4 Context
+  c4_containers.puml          # C4 Containers
+  c4_component.puml           # C4 Component
+  deployment.puml             # Deployment
+  database_diagram.puml       # Database schema
+  nosql_database.puml         # NoSQL databases
+  assets/diagrams/            # стили для диаграмм
+
 mkdocs.yml                    # конфигурация MkDocs (nav, тема, плагины)
 requirements.txt              # зависимости Python для сборки документации
+export_diagrams.sh            # скрипт экспорта PlantUML → SVG
 ```
 
 ---
@@ -162,20 +176,24 @@ cd /path/to/project
 5. Выводит отчёт о количестве обработанных файлов
 
 **Обрабатываемые файлы:**
-- `uc-01.puml` ... `uc-09.puml` (Use Cases)
+- `uc-01.puml` ... `uc-09.puml` (диаграммы последовательности сценариев)
+- `usecase_uc-01.puml` ... `usecase_uc-04.puml` (Use Case диаграммы)
 - `c4_context.puml` (C4 Context)
 - `c4_containers.puml` (C4 Containers)
+- `c4_component.puml` (C4 Component)
 - `deployment.puml` (Deployment)
-- `sequences.puml` (Sequence)
+- `database_diagram.puml` (Database schema)
+- `nosql_database.puml` (NoSQL databases)
 
 После выполнения скрипта все SVG файлы обновляются в соответствии с текущими `.puml` исходниками.
 
 ### Ссылки на диаграммы в Markdown
 
-В страницах `docs/10_diagrams/*.md` используются относительные ссылки, например:
+В страницах документации используются относительные ссылки, например:
 
 ```md
-![C4 Context](../assets/diagrams/C4_Context_UC_Platform.svg)
+![C4 Context](../assets/diagrams/c4_context.svg)
+![Use Case диаграмма](../assets/diagrams/usecase_uc-01.svg)
 ```
 
 ---
