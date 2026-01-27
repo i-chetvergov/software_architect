@@ -14,18 +14,18 @@ left to right direction
 title "Платформа Унифицированных Коммуникаций — Контейнерная диаграмма системы"
 
 ' ==========================================================
-' ТЕГИ И СТИЛИ
+' ТЕГИ И СТИЛИ (усиленная контрастность фона под светлый текст)
 ' ==========================================================
-AddElementTag("Сигнализация", $bgColor="#E3F2FD", $borderColor="#1976D2")
-AddElementTag("Медиа",       $bgColor="#E8F5E9", $borderColor="#388E3C")
-AddElementTag("Presence",    $bgColor="#FFF3E0", $borderColor="#F57C00")
-AddElementTag("Монетизация", $bgColor="#F3E5F5", $borderColor="#7B1FA2")
-AddElementTag("Платформа",   $bgColor="#ECEFF1", $borderColor="#455A64")
-AddElementTag("Периметр",    $bgColor="#FFEBEE", $borderColor="#C62828")
-AddElementTag("Данные",      $bgColor="#E8EAF6", $borderColor="#3F51B5")
+AddElementTag("Сигнализация", $bgColor="#1565C0", $borderColor="#0D47A1")
+AddElementTag("Медиа",       $bgColor="#2E7D32", $borderColor="#1B5E20")
+AddElementTag("Presence",    $bgColor="#EF6C00", $borderColor="#E65100")
+AddElementTag("Монетизация", $bgColor="#6A1B9A", $borderColor="#4A148C")
+AddElementTag("Платформа",   $bgColor="#455A64", $borderColor="#263238")
+AddElementTag("Периметр",    $bgColor="#C62828", $borderColor="#B71C1C")
+AddElementTag("Данные",      $bgColor="#283593", $borderColor="#1A237E")
 
 ' Новый домен для политик (ABAC/OPA)
-AddElementTag("Политики",    $bgColor="#FFFDE7", $borderColor="#9E9D24")
+AddElementTag("Политики",    $bgColor="#F9A825", $borderColor="#F57F17")
 
 ' ==========================================================
 ' АКТЁРЫ

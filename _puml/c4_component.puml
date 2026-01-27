@@ -14,12 +14,13 @@ left to right direction
 title "Call Control Service — Компонентная диаграмма"
 
 ' ==========================================================
-' ТЕГИ И СТИЛИ (выровнено с контейнерной диаграммой)
+' ТЕГИ И СТИЛИ (усиленная контрастность фона под светлый текст,
+' выровнено с контейнерной диаграммой)
 ' ==========================================================
-AddElementTag("Периметр",    $bgColor="#FFEBEE", $borderColor="#C62828")
-AddElementTag("Сигнализация",$bgColor="#E3F2FD", $borderColor="#1976D2")
-AddElementTag("Данные",      $bgColor="#E8EAF6", $borderColor="#3F51B5")
-AddElementTag("Политики",    $bgColor="#FFFDE7", $borderColor="#9E9D24")
+AddElementTag("Сигнализация", $bgColor="#1565C0", $borderColor="#0D47A1")
+AddElementTag("Периметр",     $bgColor="#C62828", $borderColor="#B71C1C")
+AddElementTag("Данные",       $bgColor="#283593", $borderColor="#1A237E")
+AddElementTag("Политики",     $bgColor="#F9A825", $borderColor="#F57F17")
 
 ' ==========================================================
 ' АКТЁРЫ И ВНЕШНИЕ КОНТЕЙНЕРЫ

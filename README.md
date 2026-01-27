@@ -241,5 +241,6 @@ mkdocs build --clean --strict
 
 **Экспорт диаграмм (PlantUML → SVG):**
 ```bash
+chmod +x export_diagrams.sh
 ./export_diagrams.sh
 ```
