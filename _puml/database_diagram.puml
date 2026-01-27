@@ -14,8 +14,13 @@ skinparam package {
   BorderColor #424242
 }
 
-' ============ DB_ACCOUNTS ============
+' ВАЖНО:
+' - Внутри каждого package показаны физические FK (сплошные связи).
+' - Между пакетами (между БД) связи помечены как ЛОГИЧЕСКИЕ (пунктир), т.к. физические FK across-DB обычно не применяются.
 
+' ==========================================================
+' DB_ACCOUNTS
+' ==========================================================
 package "DB_ACCOUNTS\n(PostgreSQL)\nДомен: Аккаунты и профили" {
 
   class accounts {
@@ -28,33 +33,25 @@ package "DB_ACCOUNTS\n(PostgreSQL)\nДомен: Аккаунты и профил
   }
 
   note right of accounts
-    Таблица accounts — учетные записи пользователей UC-платформы.
-    Хранит идентификатор аккаунта, email и хеш пароля.
-    Поле status отражает состояние учётной записи
-    (active / suspended / deleted) и управляет доступом к системе.
-    Используется сервисом IAM для аутентификации и авторизации.
-    Данные аккаунтов являются критичными и не должны физически удаляться,
-    предпочтительно переводить их в "deleted" / "suspended".
+    accounts — учётные записи пользователей UC-платформы.
+    Используется IAM для аутентификации и как источник identity.
+    Удаление — логическое (status=deleted/suspended), физическое удаление не допускается (audit/compliance).
   end note
 
   class user_profiles {
     + PK_id : uuid
-    + FK_account_id : uuid
+    + FK_account_id : uuid  ' UNIQUE (1:1)
     + display_name : text
     + phone_number : text
     + timezone : text
     + language : text
-    + status : text        ' available / busy / away / offline
   }
 
   note right of user_profiles
-    Таблица user_profiles — профили пользователей UC-платформы.
-    Хранит отображаемое имя, номер телефона, часовой пояс и язык.
-    Поле status отражает текущий статус presence пользователя.
-    Один аккаунт может иметь один профиль.
-    Профиль используется в вызовах, messaging, presence и интеграциях.
-    Значение timezone используется для корректного отображения времени
-    и применения правил маршрутизации по времени суток.
+    user_profiles — профиль пользователя (1:1 с accounts).
+    timezone и language — для UI/маршрутизации по времени/локали.
+    Presence-статусы вынесены в DB_MESSAGING (presence_status),
+    чтобы не смешивать домены "профиль" и "presence-runtime".
   end note
 
   class user_devices {
@@ -68,13 +65,9 @@ package "DB_ACCOUNTS\n(PostgreSQL)\nДомен: Аккаунты и профил
   }
 
   note right of user_devices
-    Таблица user_devices — зарегистрированные устройства пользователей.
-    Хранит тип устройства (web, mobile, desktop, SIP-устройство),
-    уникальный идентификатор устройства и токен регистрации.
-    Поле last_seen отслеживает последнюю активность устройства.
-    Используется для управления несколькими устройствами,
-    синхронизации состояния и маршрутизации входящих вызовов.
-    Один аккаунт может иметь несколько активных устройств.
+    user_devices — зарегистрированные устройства.
+    Используется для multi-device, маршрутизации вызова на набор устройств,
+    а также для пушей/токенов и контроля активности.
   end note
 
   class feature_flags {
@@ -87,14 +80,8 @@ package "DB_ACCOUNTS\n(PostgreSQL)\nДомен: Аккаунты и профил
   }
 
   note right of feature_flags
-    Таблица feature_flags — конфигурация и feature-флаги системы.
-    Поле key — уникальное имя флага, value — произвольные параметры в JSON.
-    Поле scope определяет уровень применения: global / tenant / account / device.
-    Поле scope_ref содержит конкретное значение tenant_id, account_id или device_id.
-    Записи используются сервисами конфигураций и приложениями в рантайме
-    для включения/отключения функций, A/B-тестов и поэтапного выката.
-    Логически связана с accounts и user_profiles, но без жёстких FK,
-    чтобы не ломать независимость доменов и кросс-БД границы.
+    feature_flags — feature-toggle/config storage.
+    Связь со scope_ref — логическая (через приложение), без жёстких FK.
   end note
 
   class routing_rules {
@@ -108,25 +95,48 @@ package "DB_ACCOUNTS\n(PostgreSQL)\nДомен: Аккаунты и профил
   }
 
   note right of routing_rules
-    Таблица routing_rules — правила маршрутизации входящих вызовов.
-    Хранит правила для конкретного пользователя с приоритетом выполнения.
-    Поле rule_type определяет тип правила (по времени, presence, устройству).
-    Поле conditions содержит условия в JSON (время суток, статус, устройство).
-    Поле actions содержит действия в JSON (маршрутизация на устройство, очередь, голосовую почту).
-    Используется Call Control Service для принятия решений о маршрутизации.
+    routing_rules — пользовательские правила маршрутизации.
+    Используется Call Control при выборе target'ов (device/queue/voicemail/external),
+    а также как источник условий (time/presence/device).
   end note
+
+  class policy_assignments {
+    + PK_id : uuid
+    + FK_account_id : uuid
+    + policy_subject_type : text   ' user / group / role
+    + policy_subject_ref : text
+    + policy_bundle_version : text
+    + created_at : timestamp
+  }
+
+  note right of policy_assignments
+    policy_assignments — привязки политик (ABAC/OPA) к субъектам.
+    Хранит версию набора политик (bundle_version) для воспроизводимости решений.
+    Используется Provisioning/IAM при управлении доступом.
+  end note
+
+  ' Физические связи внутри DB_ACCOUNTS
+  accounts "1" -- "1" user_profiles : FK_account_id (UNIQUE)
+  accounts "1" -- "*" user_devices : FK_account_id
+  accounts "1" -- "*" routing_rules : FK_account_id
+  accounts "1" -- "*" policy_assignments : FK_account_id
+
+  ' Логические связи feature_flags (НЕ физические FK)
+  feature_flags .. user_profiles : scope="account"\nscope_ref=account_id
+  feature_flags .. user_devices  : scope="device"\nscope_ref=device_id
 }
 
-' ============ DB_CALLS ============
-
+' ==========================================================
+' DB_CALLS
+' ==========================================================
 package "DB_CALLS\n(PostgreSQL)\nДомен: Сигнализация и вызовы" {
 
   class call_sessions {
     + PK_id : uuid
     + call_id : text
     + correlation_id : text
-    + FK_initiator_account_id : uuid
-    + FK_callee_account_id : uuid
+    + initiator_account_id : uuid   ' logical ref to accounts
+    + callee_account_id : uuid      ' logical ref to accounts
     + direction : text     ' inbound / outbound
     + call_type : text     ' voice / video / conference
     + status : text        ' initiating / ringing / answered / ended / failed
@@ -136,34 +146,25 @@ package "DB_CALLS\n(PostgreSQL)\nДомен: Сигнализация и выз�
   }
 
   note right of call_sessions
-    Таблица call_sessions — активные и завершённые сессии вызовов.
-    Хранит call_id и correlation_id для сквозной трассировки.
-    Содержит ссылки на инициатора и получателя вызова.
-    Поле direction определяет направление (входящий/исходящий).
-    Поле call_type — тип вызова (голосовой, видеозвонок, конференция).
-    Поле status отражает жизненный цикл вызова.
-    Используется Call Control Service для управления вызовами
-    и формирования CDR записей.
+    call_sessions — сессии вызовов (основная сущность Call Control).
+    account_id поля — логические ссылки на DB_ACCOUNTS.
+    correlation_id — для сквозного трейсинга (logs/traces/CDR).
   end note
 
   class call_legs {
     + PK_id : uuid
     + FK_call_session_id : uuid
-    + FK_device_id : uuid
-    + leg_type : text      ' local / pstn / webrtc / sip
+    + device_id : uuid           ' logical ref to user_devices
+    + leg_type : text            ' local / pstn / webrtc / sip
     + remote_address : text
-    + status : text        ' active / hold / transfer / ended
+    + status : text              ' active / hold / transfer / ended
     + started_at : timestamp
     + ended_at : timestamp
   }
 
   note right of call_legs
-    Таблица call_legs — ноги вызова (участники соединения).
-    Один вызов может иметь несколько ног (конференция, перевод).
-    Хранит связь с устройством и тип ноги (локальная, PSTN, WebRTC, SIP).
-    Поле remote_address содержит адрес удалённой стороны.
-    Используется для управления сложными сценариями вызовов:
-    конференции, переводы, удержание, переключение устройств.
+    call_legs — "ноги" вызова.
+    device_id — логическая ссылка на user_devices (DB_ACCOUNTS).
   end note
 
   class call_routing {
@@ -171,18 +172,14 @@ package "DB_CALLS\n(PostgreSQL)\nДомен: Сигнализация и выз�
     + FK_call_session_id : uuid
     + routing_step : integer
     + target_type : text   ' device / queue / voicemail / external
-    + target_id : text
+    + target_ref : text
     + result : text        ' success / busy / no_answer / failed
     + attempted_at : timestamp
   }
 
   note right of call_routing
-    Таблица call_routing — история попыток маршрутизации вызова.
-    Хранит последовательность попыток маршрутизации для каждого вызова.
-    Поле routing_step определяет порядок попытки.
-    Поле target_type и target_id указывают на цель маршрутизации.
-    Поле result фиксирует результат попытки.
-    Используется для анализа качества маршрутизации и отладки.
+    call_routing — история попыток маршрутизации.
+    target_ref — внешний идентификатор цели (device_id/queue_id/number).
   end note
 
   class call_queues {
@@ -195,42 +192,58 @@ package "DB_CALLS\n(PostgreSQL)\nДомен: Сигнализация и выз�
     + is_active : boolean
   }
 
-  note right of call_queues
-    Таблица call_queues — очереди для входящих вызовов.
-    Хранит название, описание и стратегию распределения вызовов.
-    Поле strategy определяет алгоритм (всем одновременно, самый долго простаивающий, по кругу).
-    Поля timeout_sec и max_wait_sec задают таймауты ожидания.
-    Используется для маршрутизации входящих вызовов в группы операторов.
-  end note
-
   class queue_members {
     + PK_id : uuid
     + FK_queue_id : uuid
-    + FK_account_id : uuid
+    + account_id : uuid    ' logical ref to accounts
     + priority : integer
     + is_active : boolean
   }
 
   note right of queue_members
-    Таблица queue_members — участники очередей.
-    Связывает очереди с пользователями (операторами).
-    Поле priority определяет приоритет оператора в очереди.
-    Используется для управления составом операторов в очередях.
+    queue_members — состав очередей.
+    account_id — логическая ссылка на accounts (DB_ACCOUNTS).
   end note
+
+  class policy_decision_audit {
+    + PK_id : uuid
+    + correlation_id : text
+    + subject_account_id : uuid  ' logical ref to accounts
+    + action : text
+    + resource : text
+    + decision : text            ' allow / deny
+    + obligations : jsonb
+    + policy_bundle_version : text
+    + decided_at : timestamp
+  }
+
+  note right of policy_decision_audit
+    policy_decision_audit — аудит ABAC/OPA решений в runtime.
+    Позволяет объяснять "почему был запрет/разрешение" (security/compliance),
+    и воспроизводить решение по policy_bundle_version.
+    Заполняется Call Control (через Policy Client) при критичных действиях
+    (например: инициировать вызов, перевод, подключение к конференции).
+  end note
+
+  ' Физические связи внутри DB_CALLS
+  call_sessions "1" -- "*" call_legs : FK_call_session_id
+  call_sessions "1" -- "*" call_routing : FK_call_session_id
+  call_queues "1" -- "*" queue_members : FK_queue_id
 }
 
-' ============ DB_CDR ============
-
+' ==========================================================
+' DB_CDR
+' ==========================================================
 package "DB_CDR\n(PostgreSQL)\nДомен: CDR и биллинг" {
 
   class cdr_records {
     + PK_id : uuid
     + call_id : text
     + correlation_id : text
-    + FK_account_id : uuid
-    + FK_device_id : uuid
-    + direction : text     ' inbound / outbound
-    + call_type : text     ' voice / video / conference
+    + account_id : uuid          ' logical ref to accounts
+    + device_id : uuid           ' logical ref to user_devices
+    + direction : text           ' inbound / outbound
+    + call_type : text           ' voice / video / conference
     + source_number : text
     + destination_number : text
     + duration_sec : integer
@@ -243,16 +256,9 @@ package "DB_CDR\n(PostgreSQL)\nДомен: CDR и биллинг" {
   }
 
   note right of cdr_records
-    Таблица cdr_records — детализация вызовов (Call Detail Records).
-    Хранит полную информацию о вызовах для биллинга и аналитики.
-    Содержит call_id и correlation_id для трассировки.
-    Поля source_number и destination_number — номера участников.
-    Поле duration_sec — длительность разговора в секундах.
-    Поля started_at, answered_at, ended_at — временные метки этапов вызова.
-    Поле termination_reason — причина завершения (normal, busy, no_answer, error).
-    Поля cost и currency — стоимость вызова для биллинга.
-    Используется Billing Service для расчёта стоимости и генерации отчётов.
-    Записи не должны удаляться (требования compliance и аудита).
+    cdr_records — CDR (детализация) для биллинга и аналитики.
+    account_id/device_id — логические ссылки на DB_ACCOUNTS.
+    Записи не удаляются (compliance/audit).
   end note
 
   class billing_plans {
@@ -264,17 +270,9 @@ package "DB_CDR\n(PostgreSQL)\nДомен: CDR и биллинг" {
     + is_active : boolean
   }
 
-  note right of billing_plans
-    Таблица billing_plans — тарифные планы для биллинга.
-    Хранит название, тип плана и тарифы.
-    Поле plan_type определяет модель тарификации (поминутная, фиксированная, безлимит).
-    Поле rate_per_minute — стоимость минуты разговора.
-    Используется для расчёта стоимости вызовов по тарифным планам.
-  end note
-
   class account_billing {
     + PK_id : uuid
-    + FK_account_id : uuid
+    + account_id : uuid        ' logical ref to accounts
     + FK_billing_plan_id : uuid
     + balance : numeric
     + currency : text
@@ -282,17 +280,13 @@ package "DB_CDR\n(PostgreSQL)\nДомен: CDR и биллинг" {
     + is_active : boolean
   }
 
-  note right of account_billing
-    Таблица account_billing — биллинговые данные аккаунтов.
-    Связывает аккаунты с тарифными планами.
-    Хранит баланс, валюту и кредитный лимит аккаунта.
-    Используется для контроля расходов и блокировки вызовов
-    при превышении лимитов.
-  end note
+  ' Физические связи внутри DB_CDR
+  account_billing "*" -- "1" billing_plans : FK_billing_plan_id
 }
 
-' ============ DB_MESSAGING ============
-
+' ==========================================================
+' DB_MESSAGING
+' ==========================================================
 package "DB_MESSAGING\n(PostgreSQL)\nДомен: Сообщения и presence" {
 
   class conversations {
@@ -302,144 +296,198 @@ package "DB_MESSAGING\n(PostgreSQL)\nДомен: Сообщения и presence"
     + updated_at : timestamp
   }
 
-  note right of conversations
-    Таблица conversations — беседы (диалоги, группы, каналы).
-    Хранит тип беседы (личная, групповая, канал).
-    Используется для организации сообщений в беседы.
-    Одна беседа может содержать множество сообщений.
-  end note
-
   class conversation_participants {
     + PK_id : uuid
     + FK_conversation_id : uuid
-    + FK_account_id : uuid
-    + role : text          ' owner / admin / member
+    + account_id : uuid         ' logical ref to accounts
+    + role : text               ' owner / admin / member
     + joined_at : timestamp
     + left_at : timestamp
   }
 
-  note right of conversation_participants
-    Таблица conversation_participants — участники бесед.
-    Связывает беседы с пользователями и определяет их роли.
-    Поле left_at заполняется при выходе участника из беседы.
-    Используется для управления доступом к беседам и уведомлений.
-  end note
-
   class messages {
     + PK_id : uuid
     + FK_conversation_id : uuid
-    + FK_sender_account_id : uuid
-    + message_type : text  ' text / file / voice / video
+    + sender_account_id : uuid  ' logical ref to accounts
+    + message_type : text       ' text / file / voice / video
     + content : text
     + metadata : jsonb
     + sent_at : timestamp
+  }
+
+  class message_receipts {
+    + PK_id : uuid
+    + FK_message_id : uuid
+    + account_id : uuid         ' logical ref to accounts
     + delivered_at : timestamp
     + read_at : timestamp
   }
 
-  note right of messages
-    Таблица messages — сообщения в беседах.
-    Хранит тип сообщения (текст, файл, голосовое, видеосообщение).
-    Поле content содержит текст или ссылку на медиа-файл.
-    Поле metadata хранит дополнительные данные в JSON (размер файла, длительность и т.п.).
-    Поля sent_at, delivered_at, read_at отслеживают статус доставки.
-    Используется Messaging Service для хранения и доставки сообщений.
+  note right of message_receipts
+    message_receipts — статусы доставки/прочтения по участникам.
+    Нормализует delivered/read вместо хранения delivered_at/read_at в messages
+    (подходит для групп/каналов).
+  end note
+
+  class message_attachments {
+    + PK_id : uuid
+    + FK_message_id : uuid
+    + storage_key : text        ' S3 key
+    + content_type : text
+    + size_bytes : bigint
+    + checksum : text
+    + created_at : timestamp
+  }
+
+  note right of message_attachments
+    message_attachments — вложения сообщений.
+    storage_key указывает на объект в S3 (Object Storage), что согласовано с deployment.
   end note
 
   class presence_status {
     + PK_id : uuid
-    + FK_account_id : uuid
-    + status : text        ' available / busy / away / offline
+    + account_id : uuid         ' logical ref to accounts
+    + status : text             ' available / busy / away / offline
     + status_message : text
     + last_seen : timestamp
     + updated_at : timestamp
   }
 
-  note right of presence_status
-    Таблица presence_status — статусы presence пользователей.
-    Хранит текущий статус (доступен, занят, отошёл, офлайн).
-    Поле status_message — произвольное сообщение статуса.
-    Поле last_seen — время последней активности.
-    Используется Presence Service для отображения статусов
-    и принятия решений о маршрутизации вызовов.
-  end note
-
   class presence_subscriptions {
     + PK_id : uuid
-    + FK_subscriber_account_id : uuid
-    + FK_target_account_id : uuid
+    + subscriber_account_id : uuid  ' logical ref to accounts
+    + target_account_id : uuid      ' logical ref to accounts
     + is_active : boolean
     + created_at : timestamp
   }
 
-  note right of presence_subscriptions
-    Таблица presence_subscriptions — подписки на изменения presence.
-    Хранит связи между подписчиком и целевым пользователем.
-    Используется для оптимизации уведомлений о изменениях статусов:
-    уведомления отправляются только подписчикам.
-  end note
+  ' Физические связи внутри DB_MESSAGING
+  conversations "1" -- "*" conversation_participants : FK_conversation_id
+  conversations "1" -- "*" messages : FK_conversation_id
+  messages "1" -- "*" message_receipts : FK_message_id
+  messages "1" -- "*" message_attachments : FK_message_id
 }
 
-' ============ СВЯЗИ МЕЖДУ ТАБЛИЦАМИ ============
+' ==========================================================
+' DB_CONFERENCES (добавлено: соответствует контейнеру Voice Conferencing Service и deployment)
+' ==========================================================
+package "DB_CONFERENCES\n(PostgreSQL)\nДомен: Голосовые конференции" {
 
-' --- DB_ACCOUNTS ---
-accounts "1" -- "1" user_profiles : FK_account_id
-accounts "1" -- "*" user_devices : FK_account_id
-accounts "1" -- "*" routing_rules : FK_account_id
+  class conferences {
+    + PK_id : uuid
+    + conference_id : text
+    + title : text
+    + owner_account_id : uuid     ' logical ref to accounts
+    + join_policy : text          ' invite_only / org / public_link
+    + pin_hash : text
+    + created_at : timestamp
+    + updated_at : timestamp
+    + is_active : boolean
+  }
 
-' --- ЛОГИЧЕСКИЕ СВЯЗИ FEATURE FLAGS (НЕ ФИЗИЧЕСКИЕ FK) ---
-feature_flags .. user_profiles : scope = "account"\nscope_ref = account_id
-feature_flags .. user_devices : scope = "device"\nscope_ref = device_id
+  note right of conferences
+    conferences — комнаты конференций (voice conferencing домен).
+    join_policy определяет модель доступа (в т.ч. гостевая ссылка),
+    owner_account_id — логическая ссылка на accounts.
+  end note
 
-' --- DB_CALLS ---
-call_sessions "1" -- "*" call_legs : FK_call_session_id
-call_sessions "1" -- "*" call_routing : FK_call_session_id
-call_sessions "*" -- "1" accounts : FK_initiator_account_id
-call_sessions "*" -- "1" accounts : FK_callee_account_id
-call_legs "*" -- "1" user_devices : FK_device_id
-call_queues "1" -- "*" queue_members : FK_queue_id
-queue_members "*" -- "1" accounts : FK_account_id
+  class conference_participants {
+    + PK_id : uuid
+    + FK_conference_id : uuid
+    + participant_type : text     ' internal / external
+    + account_id : uuid           ' logical (для internal)
+    + external_ref : text         ' email/phone/guest_id (для external)
+    + role : text                 ' owner / moderator / participant
+    + joined_at : timestamp
+    + left_at : timestamp
+  }
 
-' --- DB_CDR ---
-cdr_records "*" -- "1" accounts : FK_account_id
-cdr_records "*" -- "1" user_devices : FK_device_id
-account_billing "*" -- "1" accounts : FK_account_id
-account_billing "*" -- "1" billing_plans : FK_billing_plan_id
+  note right of conference_participants
+    conference_participants — участники конференции.
+    Для внешних участников используется external_ref (гость по ссылке/телефону),
+    для внутренних — account_id (логическая ссылка на accounts).
+  end note
 
-' --- DB_MESSAGING ---
-conversations "1" -- "*" conversation_participants : FK_conversation_id
-conversations "1" -- "*" messages : FK_conversation_id
-conversation_participants "*" -- "1" accounts : FK_account_id
-messages "*" -- "1" accounts : FK_sender_account_id
-presence_status "*" -- "1" accounts : FK_account_id
-presence_subscriptions "*" -- "1" accounts : FK_subscriber_account_id
-presence_subscriptions "*" -- "1" accounts : FK_target_account_id
+  class conference_sessions {
+    + PK_id : uuid
+    + FK_conference_id : uuid
+    + correlation_id : text
+    + started_at : timestamp
+    + ended_at : timestamp
+    + status : text               ' starting / active / ended / failed
+  }
 
-' ============ ОБЩЕЕ ПРИМЕЧАНИЕ ============
+  note right of conference_sessions
+    conference_sessions — экземпляры (сессии) проведения конференции.
+    correlation_id обеспечивает связь с трейсингом и с call_sessions/cdr_records.
+  end note
 
+  class conference_recordings {
+    + PK_id : uuid
+    + FK_conference_session_id : uuid
+    + storage_key : text         ' S3 key
+    + duration_sec : integer
+    + created_at : timestamp
+  }
+
+  note right of conference_recordings
+    conference_recordings — метаданные записей конференций.
+    storage_key хранит ключ объекта в S3 (Object Storage).
+  end note
+
+  ' Физические связи внутри DB_CONFERENCES
+  conferences "1" -- "*" conference_participants : FK_conference_id
+  conferences "1" -- "*" conference_sessions : FK_conference_id
+  conference_sessions "1" -- "*" conference_recordings : FK_conference_session_id
+}
+
+' ==========================================================
+' ЛОГИЧЕСКИЕ СВЯЗИ МЕЖДУ ДОМЕНАМИ (между БД) — пунктиром
+' ==========================================================
+
+' --- DB_CALLS <-> DB_ACCOUNTS (логические) ---
+call_sessions .. accounts : initiator_account_id / callee_account_id
+call_legs .. user_devices : device_id
+queue_members .. accounts : account_id
+policy_decision_audit .. accounts : subject_account_id
+
+' --- DB_CDR <-> DB_ACCOUNTS (логические) ---
+cdr_records .. accounts : account_id
+cdr_records .. user_devices : device_id
+account_billing .. accounts : account_id
+
+' --- DB_MESSAGING <-> DB_ACCOUNTS (логические) ---
+conversation_participants .. accounts : account_id
+messages .. accounts : sender_account_id
+message_receipts .. accounts : account_id
+presence_status .. accounts : account_id
+presence_subscriptions .. accounts : subscriber_account_id / target_account_id
+
+' --- DB_CONFERENCES <-> DB_ACCOUNTS (логические) ---
+conferences .. accounts : owner_account_id
+conference_participants .. accounts : account_id (internal)
+
+' --- ЛОГИЧЕСКАЯ СВЯЗЬ Call Sessions <-> Conference Sessions (через correlation_id / call_type=conference) ---
+call_sessions .. conference_sessions : correlation_id / call_type=conference
+
+' ==========================================================
+' ОБЩЕЕ ПРИМЕЧАНИЕ
+' ==========================================================
 note bottom
-  Разделение по БД:
-  - DB_ACCOUNTS — идентификация, профили, устройства, правила маршрутизации;
-  - DB_CALLS — сессии вызовов, ноги вызовов, маршрутизация, очереди;
-  - DB_CDR — детализация вызовов, тарифные планы, биллинг аккаунтов;
-  - DB_MESSAGING — беседы, сообщения, presence статусы и подписки.
+  Разделение по БД (соответствует контейнерной/деплоймент диаграммам):
+  - DB_ACCOUNTS — IAM/профили/устройства/feature_flags/routing_rules + привязки политик (policy_assignments)
+  - DB_CALLS — сигнализация: call_sessions/call_legs/call_routing/queues + аудит ABAC решений (policy_decision_audit)
+  - DB_CDR — детализация и биллинг
+  - DB_MESSAGING — чат и presence (включая receipts и attachments -> S3)
+  - DB_CONFERENCES — голосовые конференции (комнаты/участники/сессии/записи -> S3)
 
-  Дополнительные хранилища:
-  - Redis — кэширование сессий, токенов, presence, активных чатов;
-  - Object Storage (S3-совместимое) — хранение записей разговоров и медиа-файлов.
+  Хранилища вне PostgreSQL:
+  - Redis — кэш сессий/маршрутов/presence/active chats
+  - Object Storage (S3) — записи разговоров/конференций, вложения сообщений
 
-  PK_* — первичный ключ таблицы.
-  FK_* — внешний ключ на сущность из другого класса/домена.
-
-  feature_flags:
-  - scope задаёт уровень применения (global / tenant / account / device);
-  - scope_ref содержит конкретное значение (tenant_id / account_id / device_id);
-  - связи с accounts и user_profiles на диаграмме — логические,
-    реализуются на уровне приложения, а не физическими FK.
-
-  Связи между разными пакетами (между БД)
-  являются логическими внешними ключами на уровне приложения,
-  а не физическими ограничениями внутри одной СУБД.
+  Условности:
+  - Сплошные связи внутри пакета = физические FK в одной БД.
+  - Пунктир между пакетами = логические ссылки (на уровне приложения), без cross-DB FK.
 end note
 
 @enduml

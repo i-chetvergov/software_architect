@@ -1,8 +1,12 @@
 @startuml deployment
-!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+' Диаграмма развертывания (C4) — фиксируем стек: Kafka, S3 (MinIO/AWS), протоколы и домены (chat vs conferencing, OPA PDP)
+
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Deployment.puml
+
 skinparam backgroundColor #FFFFFF
 skinparam legendBackgroundColor #EEEBDC
 skinparam legendBorderColor #2D3E50
+skinparam legendFontColor #000000
 
 skinparam linetype ortho
 skinparam arrowColor #999
@@ -11,7 +15,7 @@ skinparam shadowing false
 skinparam defaultTextAlignment center
 left to right direction
 
-title "Платформа Унифицированных Коммуникаций — Диаграмма развертывания"
+title "Платформа Унифицированных Коммуникаций — Диаграмма развертывания (Kubernetes, Kafka, S3)"
 
 skinparam node {
   BackgroundColor #F5F5F5
@@ -27,281 +31,233 @@ skinparam artifact {
   BorderColor #616161
 }
 
-' ============ КЛИЕНТ И ИНТЕРНЕТ ============
-
+' ==========================================================
+' КЛИЕНТ И ИНТЕРНЕТ
+' ==========================================================
 node "Устройство пользователя\n(ПК / ноутбук / мобильное)" as client_node #E3F2FD {
   artifact "Браузер / UC Client\n(WebRTC, WebTransport)" as browser_client
 }
 
 cloud "Интернет / CDN" as internet #FFF3E0 {
-  node "CDN статики\nи медиа-ассетов" as cdn_node #FFE0B2
+  node "CDN\n(статика, web-assets)" as cdn_node #FFE0B2
 }
 
-' ============ ОБЛАЧНЫЙ РЕГИОН ============
-
+' ==========================================================
+' ОБЛАЧНЫЙ РЕГИОН
+' ==========================================================
 cloud "Облачный провайдер\nRegion EU-1" as cloud #E0E0E0 {
 
   ' ---- Публичная подсеть ----
   node "Публичная подсеть\n(L7 балансировщик / периметр)" as public_net #FFEBEE {
-    node "Ingress Controller / Load Balancer\n(ingress)" as ingress_node #FFCDD2 {
-      artifact "api-gateway\n+ webrtc-gateway" as ingress_art
+    node "Ingress Controller / Load Balancer\n(NGINX Ingress / Managed LB)" as ingress_node #FFCDD2 {
+      artifact "Ingress rules:\n/api -> API Gateway\n/wss -> Chat WS\n/webrtc -> WebRTC GW" as ingress_art
     }
   }
 
   ' ---- Приватная подсеть: приложения ----
-  node "Приватная подсеть\nKubernetes-кластер (apps)" as k8s_app #E8F5E9 {
+  node "Приватная подсеть\nKubernetes-кластер (apps)\n(K8s + NetworkPolicies + mTLS)" as k8s_app #E8F5E9 {
 
     node "Namespace: uc-gateway" as ns_gateway #C8E6C9 {
-      artifact "api-gateway-pod\nAPI Gateway" as pod_gateway
-      artifact "webrtc-gateway-pod\nWebRTC Gateway" as pod_webrtc
+      artifact "api-gateway-pod\n(API Gateway)\nHTTPS(REST)/gRPC" as pod_gateway
+      artifact "webrtc-gateway-pod\n(WebRTC Gateway)\nWebTransport + WebRTC" as pod_webrtc
     }
 
     node "Namespace: uc-core" as ns_core #BBDEFB {
-      artifact "iam-pod\nIAM / Identity Service" as pod_iam
-      artifact "call-control-pod\nCall Control Service" as pod_call_control
-      artifact "sip-gw-pod\nSIP Gateway / SBC" as pod_sipgw
-      artifact "presence-pod\nPresence Service" as pod_presence
-      artifact "chat-pod\nMessaging / Chat Service" as pod_chat
-      artifact "provisioning-pod\nProvisioning Service" as pod_provisioning
-      artifact "billing-pod\nBilling / CDR Service" as pod_billing
-      artifact "notify-pod\nNotification Service" as pod_notify
+      artifact "iam-pod\n(IAM)\nOIDC/SAML" as pod_iam
+      artifact "opa-pdp-pod\n(Policy PDP: OPA)\nHTTP/gRPC" as pod_opa
+      artifact "call-control-pod\n(Call Control)\nHTTP/gRPC/SIP" as pod_call_control
+      artifact "sip-gw-pod\n(SIP GW / SBC)\nSIP-TLS(mTLS)" as pod_sipgw
+      artifact "presence-pod\n(Presence)\nHTTP/gRPC/Events" as pod_presence
+      artifact "chat-pod\n(Chat)\nWebSocket/HTTP/Events" as pod_chat
+      artifact "voice-conf-pod\n(Voice Conferencing)\nSIP/WebRTC/gRPC/Events" as pod_voiceconf
+      artifact "provisioning-pod\n(Provisioning)\nHTTP/gRPC/Events" as pod_provisioning
+      artifact "billing-pod\n(Billing/CDR)\nHTTP/gRPC/Events" as pod_billing
+      artifact "notify-pod\n(Notification)\nHTTP/Events" as pod_notify
     }
 
     node "Namespace: uc-media" as ns_media #F3E5F5 {
-      artifact "media-rec-pod\nMedia / Recording Service\n(медиасерверы)" as pod_media
+      artifact "media-rec-pod\n(Media/Recording)\nRTP/SRTP" as pod_media
     }
 
     node "Namespace: uc-observability" as ns_obs #FFF9C4 {
-      artifact "metrics-pod\nPrometheus / TSDB" as pod_metrics
-      artifact "logs-pod\nLoki / Elasticsearch" as pod_logs
-      artifact "traces-pod\nTempo / Jaeger" as pod_traces
-      artifact "dashboards-pod\nGrafana / Kibana" as pod_dashboards
+      artifact "metrics-pod\nPrometheus" as pod_metrics
+      artifact "logs-pod\nLoki/ELK" as pod_logs
+      artifact "traces-pod\nTempo/Jaeger" as pod_traces
+      artifact "dashboards-pod\nGrafana/Kibana" as pod_dashboards
     }
   }
 
   ' ---- Приватная подсеть: данные ----
   node "Приватная подсеть\nСлой данных" as data_net #FFF8E1 {
 
-    node "PostgreSQL HA-кластер" as pg_cluster #C5E1A5 {
-      database "DB_ACCOUNTS\n(аккаунты, профили,\nконфиги, feature_flags)" as db_accounts
-      database "DB_CALLS\nвызовы, сессии,\nмаршрутизация" as db_calls
-      database "DB_CDR\nCDR записи, биллинг" as db_cdr
-      database "DB_MESSAGING\nсообщения, чаты,\npresence" as db_messaging
+    node "PostgreSQL HA-кластер\n(Managed PG / Patroni)\nAZ-aware" as pg_cluster #C5E1A5 {
+      database "DB_ACCOUNTS\nPostgreSQL" as db_accounts
+      database "DB_CALLS\nPostgreSQL" as db_calls
+      database "DB_CDR\nPostgreSQL" as db_cdr
+      database "DB_MESSAGING\nPostgreSQL" as db_messaging
+      database "DB_CONFERENCES\nPostgreSQL" as db_conferences
     }
 
-    node "Redis-кластер\n(кэш / сессии)" as redis_node #FFCCBC {
-      artifact "Redis\nкэш сессий, токенов,\npresence, активные чаты" as redis_art
+    node "Redis-кластер\n(Managed Redis / Sentinel)\nTLS" as redis_node #FFCCBC {
+      artifact "Redis\nsessions/cache/presence" as redis_art
     }
 
-    node "Kafka / RabbitMQ кластер\n(шина событий)" as mq_node #CE93D8 {
-      artifact "message-bus\nсобытия вызовов,\nбиллинга, служебные события" as mq_art
+    node "Kafka-кластер\n(Managed Kafka / KRaft)\nTLS + ACL" as kafka_node #CE93D8 {
+      artifact "Kafka Topics:\ncall-events\ncdr-events\nchat-events\nconf-events\nprovisioning-events" as kafka_art
     }
 
-    node "Object Storage\n(S3-совместимое)" as obj_node #90CAF9 {
-      artifact "Object Storage\nзаписи разговоров,\nмедиа-файлы" as obj_art
+    node "Object Storage (S3)\n(AWS S3 / MinIO)\nTLS" as obj_node #90CAF9 {
+      artifact "S3 bucket:\nrecordings/\nmedia/" as obj_art
     }
   }
 }
 
-' ============ ВНЕШНИЕ СИСТЕМЫ ============
+' ==========================================================
+' ВНЕШНИЕ СИСТЕМЫ
+' ==========================================================
+cloud "Identity Provider / IdP\n(AD/Okta/Azure AD)" as idp_cloud #E1BEE7
+cloud "CRM / ERP / Service Desk" as crm_cloud #F8BBD0
+cloud "Email/SMS/Push Gateway" as esmsgw_cloud #FFCC80
+cloud "PSTN / Operator SBC" as pstn_cloud #A5D6A7
+cloud "Monitoring / SIEM" as siem_cloud #EF9A9A
 
-cloud "Identity Provider / IdP\n(Active Directory, Okta, Azure AD)" as idp_cloud #E1BEE7
-cloud "CRM / ERP / Service Desk\n(Salesforce, SAP, Jira)" as crm_cloud #F8BBD0
-cloud "Email/SMS/Push Gateway\n(уведомления)" as esmsgw_cloud #FFCC80
-cloud "PSTN / Operator SBC\n(операторы фиксированной связи и мобильные операторы)" as pstn_cloud #A5D6A7
-cloud "Monitoring / SIEM\n(безопасность)" as siem_cloud #EF9A9A
-
-' ============ СОЕДИНЕНИЯ ============
+' ==========================================================
+' СОЕДИНЕНИЯ (ПРОТОКОЛЫ УТОЧНЕНЫ)
+' ==========================================================
 
 ' --- Клиент и Интернет ---
-client_node --> cdn_node      : HTTPS\nстатические файлы,\nмедиа-ассеты
-client_node --> ingress_node   : HTTPS\nREST / Web API
-client_node --> pod_webrtc     : WebTransport/UDP\nсигнализация вызовов\n(real-time)
-client_node --> pod_webrtc     : WebRTC (DTLS/SRTP)\nмедиа-потоки\n(голос/видео)
-client_node --> pod_chat       : WebSocket/WebRTC\nчат и голосовой чат
+client_node --> cdn_node       : HTTPS/HTTP2\nweb-assets
+client_node --> ingress_node   : HTTPS/HTTP2\nREST/Web API
+client_node --> ingress_node   : WSS\nChat (WebSocket)
+client_node --> ingress_node   : WebTransport/UDP\nreal-time signaling
+client_node --> ingress_node   : WebRTC (DTLS/SRTP)\nmedia (voice/video)
 
-' --- Публичный периметр к приложениям ---
-ingress_node --> ns_gateway    : HTTP/gRPC\nвнутренний трафик API
+' --- Ingress -> Gateway namespace ---
+ingress_node --> pod_gateway   : HTTPS/HTTP2\nREST
+ingress_node --> pod_chat      : WSS\nChat real-time
+ingress_node --> pod_webrtc    : WebTransport/UDP + ICE\nDTLS/SRTP
+
+' --- Периметр и политики (ABAC/OPA) ---
+pod_gateway --> pod_opa        : gRPC/HTTP\nauthorize(subject,resource,action,context)\nallow/deny+obligations
+
+' --- Core сервисы (синхронный контур) ---
+pod_gateway --> pod_call_control : gRPC\ncall control commands
+pod_call_control --> pod_sipgw    : SIP/TLS (mTLS)\ninternal signaling
+pod_call_control --> pod_webrtc   : gRPC/Events\nsession control (WebRTC)
+pod_call_control --> pod_voiceconf: gRPC/Events\nconference control
+
+' --- Chat/Presence взаимодействия ---
+pod_chat --> pod_presence     : Events/HTTP\npresence updates
+pod_presence --> pod_chat     : Events\npresence notify
 
 ' --- Приложения к данным ---
-pod_iam          --> db_accounts  : SQL\nаккаунты, профили,\nfeature_flags
-pod_provisioning --> db_accounts  : SQL\nконфигурации
-pod_call_control --> db_calls     : SQL\nвызовы, сессии,\nмаршрутизация
-pod_billing      --> db_cdr       : SQL\nCDR записи, биллинг
-pod_chat         --> db_messaging : SQL\nсообщения, чаты
-pod_presence     --> db_messaging : SQL\npresence
+pod_iam          --> db_accounts    : SQL/TLS
+pod_provisioning --> db_accounts    : SQL/TLS
+pod_call_control --> db_calls       : SQL/TLS
+pod_billing      --> db_cdr         : SQL/TLS
+pod_chat         --> db_messaging   : SQL/TLS
+pod_presence     --> db_messaging   : SQL/TLS
+pod_voiceconf    --> db_conferences : SQL/TLS
 
-' --- Приложения к кэшу и очередям ---
-pod_call_control --> redis_node   : Redis\nкэш сессий, токенов,\nмаршрутизации
-pod_chat         --> redis_node   : Redis\nактивные чаты
-pod_presence     --> redis_node   : Redis\npresence статусы
-pod_iam          --> redis_node   : Redis\nсессии, токены
+' --- Redis ---
+pod_call_control --> redis_node   : Redis/TLS\nsessions/routes/dedup
+pod_chat         --> redis_node   : Redis/TLS\nactive chats
+pod_presence     --> redis_node   : Redis/TLS\npresence cache
+pod_iam          --> redis_node   : Redis/TLS\nsession cache
+pod_voiceconf    --> redis_node   : Redis/TLS\nroom state (optional)
 
-pod_call_control --> mq_node      : Events\nсобытия вызовов\n(call started/ended) [async]
-pod_billing      --> mq_node      : Events\nсобытия биллинга [async]
-pod_provisioning --> mq_node      : Events\nслужебные события [async]
+' --- Kafka (фиксируем Kafka как единую event-bus) ---
+pod_call_control ..> kafka_node  : Kafka/TLS\ncall-events [async]
+pod_billing      ..> kafka_node  : Kafka/TLS\ncdr-events [async]
+pod_chat         ..> kafka_node  : Kafka/TLS\nchat-events [async]
+pod_voiceconf    ..> kafka_node  : Kafka/TLS\nconf-events [async]
+pod_provisioning ..> kafka_node  : Kafka/TLS\nprovisioning-events [async]
+pod_notify       ..> kafka_node  : Kafka/TLS\nnotification-events [async]
+pod_media        ..> kafka_node  : Kafka/TLS\nrecording-events [async]
 
-' --- Медиа к Object Storage ---
-pod_media --> obj_node        : Запись медиа-файлов\n(recordings)
+' --- Media -> S3 ---
+pod_media --> obj_node         : S3 API (HTTPS/TLS)\nrecordings upload
+pod_voiceconf --> pod_media    : RTP/SRTP\nconference media (bridge) (optional)
+pod_sipgw --> pod_media        : RTP/SRTP\nPSTN media stream (optional)
 
-' --- Метрики приложений ---
-pod_gateway      --> pod_metrics : Метрики API Gateway [async]
-pod_call_control --> pod_metrics : Метрики сигнализации [async]
-pod_media        --> pod_metrics : Метрики медиа [async]
-pod_billing      --> pod_metrics : Бизнес-метрики [async]
+' --- Observability ---
+pod_gateway      ..> pod_metrics : Prometheus scrape / OTLP [async]
+pod_call_control ..> pod_metrics : Prometheus scrape / OTLP [async]
+pod_chat         ..> pod_metrics : Prometheus scrape / OTLP [async]
+pod_voiceconf    ..> pod_metrics : Prometheus scrape / OTLP [async]
+pod_media        ..> pod_metrics : Prometheus scrape / OTLP [async]
+pod_billing      ..> pod_metrics : Prometheus scrape / OTLP [async]
 
-pod_gateway      --> pod_logs    : Логи API Gateway [async]
-pod_call_control --> pod_logs    : Логи сигнализации [async]
-pod_media        --> pod_logs    : Логи медиа [async]
+pod_gateway      ..> pod_logs    : logs [async]
+pod_call_control ..> pod_logs    : logs [async]
+pod_chat         ..> pod_logs    : logs [async]
+pod_voiceconf    ..> pod_logs    : logs [async]
+pod_media        ..> pod_logs    : logs [async]
 
-pod_gateway      --> pod_traces  : Трассировки API Gateway [async]
-pod_call_control --> pod_traces  : Трассировки сигнализации [async]
+pod_gateway      ..> pod_traces  : OTLP traces [async]
+pod_call_control ..> pod_traces  : OTLP traces [async]
+pod_chat         ..> pod_traces  : OTLP traces [async]
+pod_voiceconf    ..> pod_traces  : OTLP traces [async]
 
-pod_dashboards   --> pod_metrics : Запросы метрик
-pod_dashboards   --> pod_logs    : Запросы логов
-pod_dashboards   --> pod_traces  : Запросы трассировок
-siem_cloud       --> pod_logs    : Сбор логов безопасности
+pod_dashboards --> pod_metrics : queries
+pod_dashboards --> pod_logs    : queries
+pod_dashboards --> pod_traces  : queries
+siem_cloud --> pod_logs        : security logs feed (agent/forwarder)
 
 ' --- Внешние интеграции ---
-pod_iam      --> idp_cloud       : HTTPS\nOIDC / SAML 2.0
-pod_billing  --> crm_cloud       : HTTPS\nотчётность и экспорт
-pod_notify   --> esmsgw_cloud    : HTTPS\nуведомления (email/SMS/push)
-pod_sipgw    --> pstn_cloud      : SIP-транки\nтелефонная связь
+pod_iam      --> idp_cloud       : HTTPS\nOIDC/SAML 2.0
+pod_billing  --> crm_cloud       : HTTPS\nexport/webhook
+pod_notify   --> esmsgw_cloud    : HTTPS\nemail/SMS/push
+pod_sipgw    --> pstn_cloud      : SIP/TLS (mTLS) + ACL\nSIP trunks
 
-' ============ ПРИМЕЧАНИЯ ============
-
+' ==========================================================
+' ПРИМЕЧАНИЯ
+' ==========================================================
 note top of k8s_app
-  Kubernetes-кластер приложений:
-  
-  uc-gateway:
-    - api-gateway (API Gateway)
-    - webrtc-gateway (WebRTC Gateway)
-  
-  uc-core:
-    - iam (IAM / Identity Service)
-    - call-control (Call Control Service)
-    - sip-gw (SIP Gateway / SBC)
-    - presence (Presence Service)
-    - chat (Messaging / Chat Service)
-    - provisioning (Provisioning Service)
-    - billing (Billing / CDR Service)
-    - notify (Notification Service)
-  
-  uc-media:
-    - media-rec (Media / Recording Service)
-  
-  uc-observability:
-    - metrics (Prometheus / TSDB)
-    - logs (Loki / Elasticsearch)
-    - traces (Tempo / Jaeger)
-    - dashboards (Grafana / Kibana)
-  
-  Масштабирование выполняется
-  на уровне Deployment/ReplicaSet
-  для каждого типа pod'а.
-  
-  Auto-scaling (HPA) по метрикам:
-  - CPU utilization
-  - Memory usage
-  - Custom metrics (RPS, latency)
+  Kubernetes (apps):
+  - namespaces: uc-gateway, uc-core, uc-media, uc-observability
+  - NetworkPolicies + mTLS для east-west трафика
+  - autoscaling: HPA по CPU/RPS/latency
+
+  Разделение доменов:
+  - Chat и Voice Conferencing — отдельные pods/масштабирование
+  - Policy PDP (OPA) — отдельная точка принятия решений ABAC
 end note
 
-note right of pg_cluster
-  PostgreSQL HA-кластер (минимум 2 реплики
-  в разных зонах доступности):
-  
-  DB_ACCOUNTS:
-    схема accounts_db
-    (accounts, profiles, feature_flags)
-  
-  DB_CALLS:
-    схема calls_db
-    (calls, sessions, routing)
-  
-  DB_CDR:
-    схема cdr_db
-    (cdr_records, billing)
-  
-  DB_MESSAGING:
-    схема messaging_db
-    (messages, chats, presence)
-  
-  Репликация и резервное
-  копирование — на уровне
-  всего кластера БД.
-end note
-
-note right of redis_node
-  Redis-кластер:
-  
-  - кэш часто читаемых данных
-    (сессии, токены, маршрутизация);
-  - хранение сессий и токенов;
-  - быстрые структуры данных
-    для presence и активных чатов.
-  
-  Используется для:
-  - снижения нагрузки на БД;
-  - обеспечения низкой задержки
-    для real-time операций.
-end note
-
-note right of mq_node
-  Kafka / RabbitMQ:
-  
-  - асинхронные события
-    между микросервисами;
-  - сглаживание пиков нагрузки;
-  - интеграция с аналитикой,
-    обработкой событий и алёртами.
-  
-  События:
-  - CallStarted, CallEnded
-  - MessageSent
-  - UserCreated
-  - NotificationRequested
+note right of kafka_node
+  Технологический выбор:
+  - Event Bus: Kafka (TLS + ACL)
+  - Разделение по топикам:
+    call-events, cdr-events, chat-events, conf-events, provisioning-events
+  - Гарантии: at-least-once (типично) + идемпотентность потребителей
 end note
 
 note right of obj_node
-  Object Storage (S3-совместимое):
-  
-  - хранение записей разговоров;
-  - медиа-файлы;
-  - долгосрочное хранение
-    для compliance и аудита.
-  
-  Интеграция с:
-  - Media / Recording Service
-  - Billing / CDR Service
+  Object Storage:
+  - S3 API (HTTPS/TLS)
+  - Реализация: AWS S3 или MinIO (on-prem)
+  - Хранение: recordings/, media/
 end note
 
 note bottom
-  Диаграмма развертывания дополняет:
-  - контейнерную диаграмму
-    (какие сервисы существуют);
-  - схему данных (какие БД и схемы
-    используются по доменам).
-  
-  Вся чувствительная информация
-  (аккаунты, вызовы, биллинг)
-  размещена в приватных подсетях.
-  Доступ извне возможен только через
-  Ingress / Load Balancer в публичной подсети.
-  
-  Сетевые политики и mTLS обеспечивают
-  внутреннюю безопасность взаимодействий.
-end note
+  Диаграмма развертывания согласована с:
+  - Context (UC Clients и внешние системы вне границы платформы)
+  - Container (выделены Chat, Voice Conferencing, OPA PDP, Kafka, S3)
+  - Component (Call Control использует PDP для ABAC и Kafka для событий)
 
-' ============ ЛЕГЕНДА ============
+  Внешний доступ:
+  - только через Ingress/LB в публичной подсети
+  - SIP trunk через SBC (SIP/TLS mTLS + ACL)
+end note
 
 legend bottom
   == Условные обозначения ==
-  node      Узел развертывания (VM, нода k8s, managed-сервис)
+  node      Узел развертывания (VM/нода k8s/managed-сервис)
   database  Экземпляр БД или логическая база в кластере
-  artifact  Развёрнутый сервис / pod / компонент
-  
-  -->   Синхронные запросы (HTTP, gRPC, SQL, Redis, SIP)
-  ..>   Асинхронные потоки (events, метрики, логирование)
+  artifact  Развёрнутый сервис / pod
+
+  -->   Синхронные взаимодействия (HTTPS/gRPC/SQL/Redis/SIP)
+  ..>   Асинхронные потоки (Kafka events, метрики/логи/трейсы)
 endlegend
 
 @enduml

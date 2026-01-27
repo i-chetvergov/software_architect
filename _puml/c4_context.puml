@@ -1,5 +1,6 @@
 @startuml c4_context
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
 skinparam backgroundColor #FFFFFF
 skinparam legendBackgroundColor #EEEBDC
 skinparam legendBorderColor #2D3E50
@@ -7,110 +8,129 @@ skinparam legendBorderColor #2D3E50
 skinparam linetype ortho
 skinparam arrowColor #999
 skinparam arrowThickness 1.2
+skinparam shadowing false
+skinparam defaultTextAlignment center
+left to right direction
 
 title "Платформа Унифицированных Коммуникаций — Контекстная диаграмма системы"
 
-' ============ АКТЁРЫ ============
-
-Person(corpUser, "Корпоративный пользователь", "Сотрудник, агент, использующий UC-платформу")
+' ==========================================================
+' АКТЁРЫ
+' ==========================================================
+Person(corpUser, "Корпоративный пользователь", "Сотрудник/агент, использующий UC-платформу")
 Person(admin, "Администратор UC", "IT-администратор, управляющий системой")
-Person(securityOfficer, "Офицер информационной безопасности", "Специалист по безопасности, контролирующий доступ и политики ИБ")
-Person(externalUser, "Внешний пользователь", "Любой человек, подключающийся по ссылке через приложение или браузер")
+Person(securityOfficer, "Офицер информационной безопасности", "Контроль доступа, политик ИБ и аудит")
+Person(externalUser, "Внешний пользователь", "Подключение по ссылке через приложение/браузер или звонок с внешней сети")
 
-' ============ СИСТЕМА UC PLATFORM ============
+' ==========================================================
+' СИСТЕМА UC PLATFORM (уровень контекста)
+' ВАЖНО: UC Clients — внешние клиенты (за пределами границы платформы).
+' ==========================================================
+System(ucPlatform, "UC Platform", "Унифицированные коммуникации: телефония (SIP/WebRTC), голосовые конференции, чаты, presence, интеграции, безопасность и наблюдаемость")
 
-System(ucPlatform, "Платформа Унифицированных Коммуникаций", "UC Platform предоставляет голосовую связь, видео, чат, presence, интеграции с CRM/ERP")
-System_Boundary(ucSystem, "UC Platform") {
-    System(ucClients, "UC Clients", "Веб-клиент (WebRTC, WebTransport), мобильные приложения (iOS/Android), Desktop-клиенты")
-    note right of ucClients
-        Клиентские приложения:
-        - Web-клиент (WebRTC, WebTransport)
-        - Мобильные приложения (iOS/Android)
-        - Desktop-клиенты
-        
-        Поддержка:
-        - Голосовые/видео вызовы
-        - Мгновенные сообщения
-        - Presence и статусы
-        - Интеграция с CRM/ERP
-    end note
-}
+System_Ext(ucClients, "UC Clients", "Web (WebRTC/WebTransport), Mobile (iOS/Android), Desktop-клиенты")
 
-' ============ ВНЕШНИЕ СИСТЕМЫ ============
+note right of ucClients
+	Клиентские приложения:
+	- Web-клиент (WebRTC/WebTransport)
+	- Мобильные приложения (iOS/Android)
+	- Desktop-клиенты
 
-System_Ext(idp, "Identity Provider", "Active Directory, Okta, Azure AD — аутентификация и SSO")
-System_Ext(crm, "CRM / ERP / Service Desk", "Salesforce, SAP, Jira — интеграция с бизнес-системами")
-System_Ext(pstn, "PSTN / Операторская сеть", "Операторы фиксированной связи и мобильные операторы — голосовая связь через SIP-транки")
-System_Ext(esmsgw, "Email/SMS/Push Gateway", "Система уведомлений — email, SMS, push-уведомления")
-System_Ext(monitoring, "Системы мониторинга и ИБ", "SIEM, Security — наблюдаемость и безопасность")
+	Основные возможности:
+	- Голосовые вызовы и конференции
+	- Текстовый чат
+	- Presence/статусы
+	- Подключение внешних участников по ссылке
+end note
 
-' ============ ВЗАИМОДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЕЙ ============
+' ==========================================================
+' ВНЕШНИЕ СИСТЕМЫ
+' ==========================================================
+System_Ext(idp, "Identity Provider", "AD/Okta/Azure AD — аутентификация и SSO (OIDC/SAML)")
+System_Ext(crm, "CRM / ERP / Service Desk", "Интеграции: карточка клиента, логирование коммуникаций, автоматизация")
+System_Ext(pstn, "PSTN / Операторская сеть", "Операторская сеть — голосовая связь через SIP-транки (через SBC)")
+System_Ext(esmsgw, "Email/SMS/Push Gateway", "Шлюз уведомлений: email/SMS/push")
+System_Ext(monitoring, "Системы мониторинга и ИБ", "SIEM/SOC/Monitoring — сбор событий, метрик, аудит")
 
-Rel(corpUser, ucClients, "Использует", "Голос/видео/чат, управление контактами")
-Rel(admin, ucPlatform, "Администрирует", "Управление политиками, пользователями, маршрутизацией")
-Rel(securityOfficer, ucPlatform, "Контролирует", "Мониторинг безопасности, аудит доступа, управление политиками ИБ")
-Rel(externalUser, ucClients, "Подключается", "Подключение по ссылке через приложение или браузер")
-Rel(externalUser, pstn, "Звонит", "Входящие вызовы в компанию")
+' Контекстный акцент по двум разработанным диаграммам:
+' 1) Chat и Voice Conferencing — разные домены/нагрузки
+System_Ext(externalMeetingUser, "Внешний участник конференции", "Подключается по ссылке (WebRTC) или как гость")
 
-' ============ КЛИЕНТСКИЕ ВЗАИМОДЕЙСТВИЯ ============
+' ==========================================================
+' ВЗАИМОДЕЙСТВИЯ ПОЛЬЗОВАТЕЛЕЙ
+' ==========================================================
+Rel(corpUser, ucClients, "Использует", "звонки/конференции/чат")
+Rel(externalUser, ucClients, "Подключается", "по ссылке (web/app)")
+Rel(externalMeetingUser, ucClients, "Подключается", "гостевое участие в конференции")
 
-Rel(ucClients, ucPlatform, "Взаимодействует", "WebRTC / WebTransport / HTTPS\n(REST, WebSocket)\nРегистрация, сигналы вызовов,\nсообщения, presence")
+Rel(admin, ucPlatform, "Администрирует", "пользователи, маршрутизация, политики, конфигурации")
+Rel(securityOfficer, ucPlatform, "Контролирует", "аудит, политики доступа (ABAC), инциденты ИБ")
 
-' ============ ИНТЕГРАЦИИ С ВНЕШНИМИ СИСТЕМАМИ ============
+Rel(externalUser, pstn, "Звонит", "входящие вызовы в компанию")
 
-Rel(ucPlatform, idp, "Аутентифицируется", "OIDC / SAML 2.0\nАутентификация и SSO,\nфедерация идентичности")
-Rel(ucPlatform, crm, "Интегрируется", "REST / Webhook / Events\nИнтеграция с карточкой клиента,\nлогирование звонков,\nавтоматизация процессов")
-Rel(ucPlatform, esmsgw, "Отправляет уведомления", "SMTP / HTTPS / Push API\nEmail/SMS/Push уведомления\nо звонках, сообщениях, событиях")
-Rel(ucPlatform, monitoring, "Отправляет метрики", "Metrics / Logs / Traces\n(OpenTelemetry, Prometheus)\nНаблюдаемость и ИБ,\nмониторинг безопасности")
-Rel(ucPlatform, pstn, "Инициирует вызовы", "SIP-транки через SBC\n(Session Border Controller)\nИсходящие вызовы")
-Rel(pstn, ucPlatform, "Маршрутизирует входящие", "SIP-транки через SBC\nВходящие вызовы")
+' ==========================================================
+' КЛИЕНТСКИЕ ВЗАИМОДЕЙСТВИЯ С UC PLATFORM
+' (на контексте показываем, что клиенты ходят в платформу разными протоколами)
+' ==========================================================
+Rel(ucClients, ucPlatform, "Взаимодействует", "HTTPS/REST, WebSocket, WebTransport, WebRTC (DTLS/SRTP)\nрегистрация, сигнализация, чат, presence, конференции")
 
-' ============ ПРИМЕЧАНИЯ ============
+' ==========================================================
+' ИНТЕГРАЦИИ UC PLATFORM С ВНЕШНИМИ СИСТЕМАМИ
+' ==========================================================
+Rel(ucPlatform, idp, "Федерация идентичности / SSO", "OIDC / SAML 2.0\nMFA, единый вход, управление сессиями")
+Rel(ucPlatform, crm, "Интеграции", "REST / Webhook / Events\nкарточка клиента, логирование звонков/чатов, автоматизация")
+Rel(ucPlatform, esmsgw, "Уведомления", "SMTP / HTTPS / Push API\nemail/SMS/push о событиях")
+Rel(ucPlatform, monitoring, "Наблюдаемость и ИБ", "Metrics / Logs / Traces + Audit\n(OpenTelemetry/экспорт в SIEM)")
 
+' PSTN: показываем периметровую доверенную связность (не user-auth, а SBC policy)
+Rel(ucPlatform, pstn, "SIP-транки через SBC", "SIP over TLS (mTLS) + ACL/Policy\nисходящие вызовы")
+Rel(pstn, ucPlatform, "SIP-транки через SBC", "SIP over TLS (mTLS) + ACL/Policy\nвходящие вызовы")
+
+' ==========================================================
+' ПРИМЕЧАНИЯ (обновлено под 2 разработанные диаграммы: containers + components)
+' ==========================================================
 note right of ucPlatform
-    Граница системы «UC Platform» включает:
-    
-    Микросервисы:
-    - Сигнализация (Call Control, SIP Gateway)
-    - Медиа (WebRTC Gateway, Media Server)
-    - Presence и Messaging
-    - Биллинг и CDR
-    - Provisioning и IAM
-    - Observability Stack
-    
-    Архитектурные принципы:
-    - Микросервисная архитектура
-    - Event-driven коммуникации
-    - Real-time обработка (WebRTC, WebTransport)
-    - Горизонтальное масштабирование
-    - Отказоустойчивость (HA)
+	Граница системы «UC Platform» включает ключевые домены:
+
+	- Сигнализация: Call Control, WebRTC/SIP шлюзы
+	- Медиа: обработка/запись, поддержка конференций
+	- Presence
+	- Messaging (чат) — отдельный домен
+	- Voice Conferencing — отдельный домен
+	- Монетизация/CDR
+	- Provisioning
+	- Наблюдаемость (метрики/логи/трейсы/аудит)
+	- Политики доступа (ABAC): PDP (OPA/REGO)
+
+	Принципы:
+	- Микросервисы + event-driven
+	- Real-time контур (WebRTC/WebTransport)
+	- Горизонтальное масштабирование
+	- Отказоустойчивость (HA)
 end note
 
 note bottom of idp
-    Identity Provider обеспечивает:
-    - Единый вход (SSO)
-    - Федерацию идентичности
-    - MFA (многофакторная аутентификация)
-    - Управление пользователями
-end note
-
-note bottom of crm
-    Интеграция с CRM/ERP позволяет:
-    - Автоматически открывать карточку клиента
-      при входящем звонке
-    - Логировать коммуникации в CRM
-    - Инициировать вызовы из CRM
-    - Синхронизировать контакты
+	Identity Provider:
+	- SSO/федерация (OIDC/SAML)
+	- MFA
+	- управление пользователями/группами (в зависимости от внедрения)
 end note
 
 note bottom of pstn
-    PSTN интеграция через SBC:
-    - Безопасная маршрутизация SIP-трафика
-    - Нормализация сигнализации
-    - Защита от атак (DDoS, SIP-флуд)
-    - Транскодирование кодеков
+	PSTN интеграция через SBC:
+	- SIP over TLS (mTLS), IP ACL, policy
+	- нормализация и interop
+	- защита от атак (SIP-flood/DDoS)
+	- (опционально) транскодирование кодеков
+end note
+
+note bottom of crm
+	CRM/ERP интеграции:
+	- открытие карточки клиента по вызову
+	- логирование коммуникаций
+	- инициирование вызовов из CRM
+	- синхронизация контактов (если требуется)
 end note
 
 SHOW_LEGEND()
-
 @enduml

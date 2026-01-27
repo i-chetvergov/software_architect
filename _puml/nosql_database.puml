@@ -14,36 +14,42 @@ skinparam package {
   BorderColor #424242
 }
 
-' ============ OBJECT STORAGE ============
+' ВАЖНО:
+' 1) Kafka выбрана как единая event-bus (из deployment).
+' 2) Object Storage — S3 API (AWS S3 / MinIO) + политика хранения/retention.
+' 3) Добавлены структуры для:
+'    - voice conferencing (отдельный домен нагрузки),
+'    - OPA/Policy bundles (PDP),
+'    - idempotency/dedup в Kafka-консьюмерах,
+'    - выдачи pre-signed URL (контролируемый доступ к S3),
+'    - Outbox/Inbox паттерна (логически) для "DB -> Kafka" надежности.
 
-package "Object Storage\n(S3-совместимое)\nДомен: Медиа-файлы и записи" {
+' ==========================================================
+' OBJECT STORAGE (S3)
+' ==========================================================
+package "Object Storage\n(S3 API: AWS S3 / MinIO)\nДомен: Медиа-файлы и записи" {
 
   class recording_bucket {
     + bucket_name : text
     + region : text
-    + storage_class : text    ' standard / glacier / deep_archive
-    + lifecycle_policy : jsonb
+    + storage_class : text    ' STANDARD / GLACIER / DEEP_ARCHIVE (пример)
+    + lifecycle_policy : json
     + encryption : text       ' SSE-S3 / SSE-KMS
   }
 
   note right of recording_bucket
-    Бакет recording_bucket — хранилище записей разговоров.
-    Организован по структуре:
-    - recordings/{call_id}/{session_id}/audio.mp3
-    - recordings/{call_id}/{session_id}/video.mp4
-    - recordings/{call_id}/{session_id}/transcript.json
-    
-    Поле storage_class определяет класс хранения:
-    - standard — для активного доступа
-    - glacier — для архивного хранения
-    - deep_archive — для долгосрочного хранения
-    
-    Поле lifecycle_policy содержит правила автоматического
-    перемещения объектов между классами хранения и удаления
-    по истечении retention периода.
-    
-    Используется Media/Recording Service для записи
-    и Billing/CDR Service для долгосрочного хранения.
+    recording_bucket — записи разговоров и конференций (S3).
+
+    Пример структуры ключей:
+    - recordings/calls/{call_id}/{session_id}/audio.opus
+    - recordings/calls/{call_id}/{session_id}/video.webm
+    - recordings/conferences/{conf_session_id}/mix.opus
+    - transcripts/{call_id}/{session_id}/stt.json
+
+    Access pattern:
+    - запись: Media/Recording Service
+    - чтение: через контролируемые ссылки (pre-signed URL)
+      с проверкой прав (ABAC/OPA) в API Gateway/Policy PDP.
   end note
 
   class media_assets_bucket {
@@ -54,93 +60,80 @@ package "Object Storage\n(S3-совместимое)\nДомен: Медиа-ф�
   }
 
   note right of media_assets_bucket
-    Бакет media_assets_bucket — хранилище медиа-ассетов.
-    Содержит:
+    media_assets_bucket — медиа-ассеты:
+    - вложения чатов (files)
     - голосовые сообщения
-    - файлы, отправленные в чатах
-    - аватары пользователей
-    - превью записей
-    
-    Поле cdn_enabled указывает на интеграцию с CDN
-    для ускорения доступа к медиа-файлам.
-    
-    Используется Messaging Service и Media Service
-    для хранения и доставки медиа-контента.
+    - аватары
+    - превью/миниатюры
+
+    CDN используется только для публично-кэшируемых ресурсов
+    (например, ассеты), но НЕ для защищённых записей разговоров,
+    где доступ должен быть авторизован.
   end note
 
-  class object_metadata {
-    + object_key : text
+  class object_index {
+    + object_id : uuid
     + bucket_name : text
-    + FK_call_id : uuid
-    + FK_account_id : uuid
+    + object_key : text
+    + owner_account_id : uuid
+    + object_type : text        ' call_recording / conf_recording / attachment / avatar / voicemail
     + content_type : text
     + size_bytes : bigint
+    + checksum : text
     + created_at : timestamp
-    + expires_at : timestamp
-    + access_policy : jsonb
+    + retention_until : timestamp
+    + access_policy_ref : text  ' ссылка на политику/класс доступа
   }
 
-  note right of object_metadata
-    Метаданные объектов в Object Storage.
-    Хранятся в PostgreSQL (DB_CDR или отдельная таблица)
-    для быстрого поиска и управления доступом.
-    
-    Поле object_key — полный путь к объекту в бакете.
-    Поле access_policy содержит политики доступа (IAM policies)
-    для временных ссылок и контроля прав.
-    
-    Поле expires_at определяет срок действия объекта
-    для автоматического удаления по retention политикам.
-    
-    Используется для каталогизации записей и медиа-файлов
-    без необходимости сканирования всего бакета.
+  note right of object_index
+    object_index — логический индекс объектов S3.
+
+    Важно:
+    - сам индекс хранится в PostgreSQL (DB_CDR/DB_MESSAGING/DB_CONFERENCES),
+      но здесь показан как "каталог" для S3, чтобы не сканировать бакеты.
+    - retention_until поддерживает compliance-ретеншн
+      (запрет удаления до даты).
   end note
+
+  class presigned_url_lease {
+    + lease_id : uuid
+    + object_id : uuid
+    + issued_to_account_id : uuid
+    + purpose : text           ' download / upload
+    + url_expires_at : timestamp
+    + issued_at : timestamp
+    + revoked_at : timestamp
+  }
+
+  note right of presigned_url_lease
+    presigned_url_lease — учёт выдачи временных ссылок (pre-signed URL).
+    Используется для:
+    - аудита доступа к записям/вложениям,
+    - ограничений по времени и отзыву,
+    - привязки к пользователю/контексту доступа.
+  end note
+
+  object_index ..> recording_bucket : хранится как объект
+  object_index ..> media_assets_bucket : хранится как объект
+  presigned_url_lease ..> object_index : выдача URL на объект
 }
 
-' ============ REDIS (KEY-VALUE) ============
-
-package "Redis\n(Key-Value Store)\nДомен: Кэш и временные данные" {
+' ==========================================================
+' REDIS (Key-Value)
+' ==========================================================
+package "Redis\n(Key-Value Store)\nДомен: Кэш, сессии, дедупликация" {
 
   class session_cache {
     + key_pattern : text      ' session:{session_id}
-    + value_type : text      ' hash
-    + fields : text
+    + value_type : text       ' hash
     + ttl_sec : integer
   }
-
-  note right of session_cache
-    Redis структура session_cache — кэш активных сессий вызовов.
-    Ключ: session:{session_id}
-    Значение: hash с полями:
-    - call_id, account_id, device_id
-    - status, started_at, last_activity
-    - routing_info (JSON)
-    
-    TTL устанавливается в зависимости от типа сессии
-    (обычно 1-24 часа).
-    
-    Используется Call Control Service для быстрого доступа
-    к информации о сессиях без запросов к PostgreSQL.
-  end note
 
   class token_cache {
     + key_pattern : text      ' token:{token_hash}
-    + value_type : text       ' string
+    + value_type : text       ' string/json
     + ttl_sec : integer
   }
-
-  note right of token_cache
-    Redis структура token_cache — кэш токенов доступа.
-    Ключ: token:{token_hash}
-    Значение: JSON с данными токена:
-    - account_id, scopes, issued_at, expires_at
-    
-    TTL соответствует времени жизни токена
-    (обычно 15-60 минут для access tokens).
-    
-    Используется IAM Service для валидации токенов
-    без обращения к базе данных при каждом запросе.
-  end note
 
   class presence_cache {
     + key_pattern : text      ' presence:{account_id}
@@ -148,67 +141,154 @@ package "Redis\n(Key-Value Store)\nДомен: Кэш и временные да
     + ttl_sec : integer
   }
 
-  note right of presence_cache
-    Redis структура presence_cache — кэш статусов presence.
-    Ключ: presence:{account_id}
-    Значение: hash с полями:
-    - status (available/busy/away/offline)
-    - status_message, last_seen
-    - device_statuses (JSON)
-    
-    TTL устанавливается в зависимости от активности
-    (обычно 5-30 минут).
-    
-    Используется Presence Service для быстрого получения
-    статусов пользователей и уведомления подписчиков
-    об изменениях.
-  end note
-
   class active_chats_cache {
     + key_pattern : text      ' chat:{conversation_id}:active
-    + value_type : text       ' sorted set
+    + value_type : text       ' zset
     + ttl_sec : integer
   }
 
-  note right of active_chats_cache
-    Redis структура active_chats_cache — кэш активных чатов.
-    Ключ: chat:{conversation_id}:active
-    Значение: sorted set с участниками и временем последней активности.
-    
-    Используется для:
-    - быстрого определения активных участников
-    - доставки сообщений только активным пользователям
-    - управления WebSocket соединениями
-    
-    TTL устанавливается при отсутствии активности
-    (обычно 1-5 минут).
-    
-    Используется Messaging Service для оптимизации
-    доставки сообщений.
-  end note
-
   class rate_limit_cache {
-    + key_pattern : text      ' ratelimit:{account_id}:{endpoint}
+    + key_pattern : text      ' ratelimit:{subject}:{endpoint}
     + value_type : text       ' counter
     + ttl_sec : integer
   }
 
-  note right of rate_limit_cache
-    Redis структура rate_limit_cache — счётчики rate limiting.
-    Ключ: ratelimit:{account_id}:{endpoint}
-    Значение: счётчик запросов с TTL.
-    
-    Используется API Gateway для ограничения частоты запросов
-    и защиты от злоупотреблений.
-    
-    TTL соответствует окну rate limiting
-    (обычно 1-60 секунд).
+  class idempotency_keys {
+    + key_pattern : text      ' idem:{service}:{operation}:{request_id}
+    + value_type : text       ' string
+    + ttl_sec : integer
+  }
+
+  note right of idempotency_keys
+    idempotency_keys — ключи идемпотентности для команд и консьюмеров событий:
+    - защита от повторной обработки (Kafka at-least-once)
+    - дедупликация повторных запросов клиента
+    TTL = окно повторной доставки/ретраев (например, 24-72 часа).
+  end note
+
+  class routing_cache {
+    + key_pattern : text      ' route:{tenant}:{callee}
+    + value_type : text       ' hash/json
+    + ttl_sec : integer
+  }
+
+  note right of routing_cache
+    routing_cache — кэш результатов маршрутизации:
+    - уменьшает обращения к DB_ACCOUNTS (routing_rules) и DB_CALLS
+    - критичен для low-latency пути Call Control.
   end note
 }
 
-' ============ TIME-SERIES DATABASE ============
+' ==========================================================
+' KAFKA (Event Bus) — ДОБАВЛЕНО
+' ==========================================================
+package "Kafka\n(Event Bus)\nДомен: События и интеграции" {
 
-package "Time-Series Database\n(Prometheus / TSDB)\nДомен: Метрики и телеметрия" {
+  class topic_call_events {
+    + name : text = "call-events"
+    + partitions : int
+    + retention_ms : bigint
+    + key : text             ' call_id / correlation_id
+  }
+
+  class topic_cdr_events {
+    + name : text = "cdr-events"
+    + partitions : int
+    + retention_ms : bigint
+    + key : text             ' call_id / correlation_id
+  }
+
+  class topic_chat_events {
+    + name : text = "chat-events"
+    + partitions : int
+    + retention_ms : bigint
+    + key : text             ' conversation_id
+  }
+
+  class topic_presence_events {
+    + name : text = "presence-events"
+    + partitions : int
+    + retention_ms : bigint
+    + key : text             ' account_id
+  }
+
+  class topic_conf_events {
+    + name : text = "conf-events"
+    + partitions : int
+    + retention_ms : bigint
+    + key : text             ' conference_id / conf_session_id
+  }
+
+  class schema_registry {
+    + enabled : boolean
+    + format : text          ' Avro / Protobuf / JSON Schema
+    + compatibility : text   ' BACKWARD / FULL
+  }
+
+  note right of schema_registry
+    Schema Registry (опционально, но рекомендуется):
+    - фиксирует контракты событий,
+    - обеспечивает эволюцию схем (compatibility),
+    - снижает риск "сломанных" событий между сервисами.
+  end note
+
+  class consumer_groups {
+    + group_id : text
+    + topics : text
+    + commit_strategy : text  ' at-least-once
+  }
+
+  note right of consumer_groups
+    consumer_groups — логическое представление групп консьюмеров:
+    - billing-cdr-consumer
+    - presence-subscriber
+    - notification-dispatcher
+    - analytics-exporter
+
+    Поведение: at-least-once => нужна идемпотентность (Redis idempotency_keys)
+    и/или inbox/outbox на уровне сервисов.
+  end note
+}
+
+' ==========================================================
+' POLICY STORAGE (OPA Bundles) — ДОБАВЛЕНО
+' ==========================================================
+package "Policy Storage\n(OPA bundles)\nДомен: ABAC/REGO политики" {
+
+  class policy_bundles {
+    + bundle_id : text
+    + version : text
+    + source : text         ' git/http
+    + checksum : text
+    + published_at : timestamp
+  }
+
+  note right of policy_bundles
+    policy_bundles — хранилище/каталог версий политик OPA.
+    Физическая реализация может быть:
+    - Git репозиторий
+    - HTTP bundle server
+    - S3 bucket (policy-bundles/)
+  end note
+
+  class policy_cache {
+    + key_pattern : text     ' opa:bundle:{version}
+    + value_type : text      ' json
+    + ttl_sec : integer
+  }
+
+  note right of policy_cache
+    policy_cache — кэш активной версии политик для PDP.
+    Может быть реализован:
+    - локально в OPA (in-memory),
+    - или в Redis (как shared-cache) для ускорения rollout/rollback.
+  end note
+}
+
+' ==========================================================
+' TIME-SERIES (Prometheus/TSDB)
+' ==========================================================
+package "Time-Series Database\n(Prometheus / TSDB)\nДомен: Метрики" {
 
   class metrics_series {
     + metric_name : text
@@ -217,26 +297,9 @@ package "Time-Series Database\n(Prometheus / TSDB)\nДомен: Метрики �
     + value : numeric
   }
 
-  note right of metrics_series
-    Time-series структура metrics_series — метрики системы.
-    Хранит временные ряды метрик с labels:
-    - call_control_calls_total{status="answered", direction="inbound"}
-    - webrtc_gateway_connections_active{region="eu-1"}
-    - api_gateway_requests_duration_seconds{endpoint="/calls", method="POST"}
-    - media_recording_duration_seconds{codec="opus"}
-    
-    Используется Observability Stack для:
-    - мониторинга производительности
-    - построения графиков и дашбордов
-    - генерации алёртов при превышении порогов
-    
-    Retention период зависит от важности метрики
-    (обычно 15 дней для детальных, 1 год для агрегированных).
-  end note
-
   class call_quality_metrics {
     + metric_name : text
-    + call_id : text
+    + correlation_id : text
     + timestamp : timestamp
     + rtt_ms : numeric
     + packet_loss_percent : numeric
@@ -245,54 +308,27 @@ package "Time-Series Database\n(Prometheus / TSDB)\nДомен: Метрики �
   }
 
   note right of call_quality_metrics
-    Time-series структура call_quality_metrics — метрики качества вызовов.
-    Хранит технические метрики качества связи:
-    - RTT (Round-Trip Time) в миллисекундах
-    - процент потери пакетов
-    - джиттер в миллисекундах
-    - MOS (Mean Opinion Score) — оценка качества
-    
-    Используется для:
-    - анализа качества связи по регионам/операторам
-    - диагностики проблем с медиа-потоками
-    - оптимизации маршрутизации вызовов
-    
-    Retention период: 30-90 дней для детального анализа.
+    Метрики качества — должны коррелироваться по correlation_id/trace_id,
+    чтобы связывать качество медиа с конкретной сессией/маршрутом.
   end note
 }
 
-' ============ LOG STORAGE ============
-
+' ==========================================================
+' LOG STORAGE (Loki/Elasticsearch)
+' ==========================================================
 package "Log Storage\n(Loki / Elasticsearch)\nДомен: Логи и аудит" {
 
   class application_logs {
-    + log_level : text        ' DEBUG / INFO / WARN / ERROR
+    + log_level : text
     + service_name : text
     + timestamp : timestamp
     + message : text
-    + fields : jsonb
+    + fields : json
   }
-
-  note right of application_logs
-    Структура application_logs — логи приложений.
-    Хранит структурированные логи сервисов:
-    - correlation_id для трассировки запросов
-    - call_id, account_id для контекста
-    - stack traces для ошибок
-    - performance metrics
-    
-    Используется для:
-    - отладки проблем
-    - анализа производительности
-    - аудита действий пользователей
-    
-    Retention период: 7-30 дней для детальных логов,
-    дольше для критических событий.
-  end note
 
   class audit_logs {
     + event_type : text
-    + FK_account_id : uuid
+    + account_id : uuid
     + action : text
     + resource_type : text
     + resource_id : text
@@ -302,26 +338,18 @@ package "Log Storage\n(Loki / Elasticsearch)\nДомен: Логи и аудит
   }
 
   note right of audit_logs
-    Структура audit_logs — логи аудита безопасности.
-    Хранит события безопасности и доступа:
-    - входы/выходы пользователей
-    - доступ к записям разговоров
-    - изменения конфигурации
-    - административные действия
-    
-    Используется для:
-    - compliance и аудита
-    - расследования инцидентов безопасности
-    - отчётности по доступу к данным
-    
-    Retention период: минимум 1 год (требования compliance),
-    возможно дольше в зависимости от политик.
+    audit_logs — аудит ИБ.
+    Важно включать события:
+    - выдача pre-signed URL (доступ к записи/вложению)
+    - решения ABAC (allow/deny) для критичных действий
+    - административные изменения конфигурации/политик
   end note
 }
 
-' ============ TRACE STORAGE ============
-
-package "Trace Storage\n(Tempo / Jaeger)\nДомен: Распределённая трассировка" {
+' ==========================================================
+' TRACE STORAGE (Tempo/Jaeger)
+' ==========================================================
+package "Trace Storage\n(Tempo / Jaeger)\nДомен: Трейсы" {
 
   class trace_spans {
     + trace_id : text
@@ -333,83 +361,68 @@ package "Trace Storage\n(Tempo / Jaeger)\nДомен: Распределённа
     + duration_ms : numeric
     + tags : map<string, string>
   }
-
-  note right of trace_spans
-    Структура trace_spans — spans распределённой трассировки.
-    Хранит информацию о выполнении операций:
-    - trace_id — идентификатор всего запроса
-    - span_id — идентификатор отдельной операции
-    - parent_span_id — связь с родительским span
-    - service_name — сервис, выполнивший операцию
-    - operation_name — название операции
-    - duration_ms — длительность выполнения
-    - tags — дополнительные метаданные
-    
-    Используется для:
-    - анализа производительности распределённых запросов
-    - диагностики проблем с задержками
-    - понимания потока выполнения через сервисы
-    
-    Retention период: 7-14 дней для детальной трассировки.
-  end note
 }
 
-' ============ СВЯЗИ И ИНТЕГРАЦИИ ============
+' ==========================================================
+' СВЯЗИ И ИНТЕГРАЦИИ (логические)
+' ==========================================================
 
-' --- Object Storage связи ---
-object_metadata ..> recording_bucket : Ссылается на объекты
-object_metadata ..> media_assets_bucket : Ссылается на объекты
+' --- Object Storage логика доступа ---
+presigned_url_lease ..> audit_logs : аудит выдачи ссылки
+application_logs ..> trace_spans : логи коррелируются с трейсам по trace_id
 
-' --- Redis связи (логические) ---
-session_cache ..> call_sessions : Кэширует данные из DB_CALLS
-token_cache ..> accounts : Кэширует данные из DB_ACCOUNTS
-presence_cache ..> presence_status : Кэширует данные из DB_MESSAGING
-active_chats_cache ..> conversations : Кэширует данные из DB_MESSAGING
+' --- Redis логика ---
+idempotency_keys ..> consumer_groups : дедупликация повторной обработки
+session_cache ..> topic_call_events : актуализация статуса по событиям
+presence_cache ..> topic_presence_events : обновления статусов
+active_chats_cache ..> topic_chat_events : события активности в чатах
+routing_cache ..> topic_call_events : кэш маршрутов может инвалидироваться событиями
 
-' --- Time-series связи (логические) ---
-metrics_series ..> call_sessions : Метрики по вызовам
-call_quality_metrics ..> call_sessions : Метрики качества по вызовам
+' --- Kafka контракты ---
+topic_call_events ..> schema_registry : контракт событий
+topic_chat_events ..> schema_registry : контракт событий
+topic_conf_events ..> schema_registry : контракт событий
 
-' --- Log/Trace связи (логические) ---
-application_logs ..> call_sessions : Логи по вызовам
-audit_logs ..> accounts : Логи аудита по аккаунтам
-trace_spans ..> call_sessions : Трейсы по вызовам
+' --- Policy bundles ---
+policy_bundles ..> policy_cache : ускорение распространения
+policy_bundles ..> object_index : политики могут управлять доступом к объектам (логически)
 
-' ============ ОБЩЕЕ ПРИМЕЧАНИЕ ============
+' --- Метрики/логи/трейсы ---
+metrics_series ..> topic_call_events : метрики агрегируют события (логически)
+call_quality_metrics ..> trace_spans : корреляция качества с трейсами
 
+' ==========================================================
+' ОБЩЕЕ ПРИМЕЧАНИЕ
+' ==========================================================
 note bottom
-  Нереляционные хранилища в UC-платформе:
-  
-  Object Storage (S3-совместимое):
-  - recording_bucket — записи разговоров
-  - media_assets_bucket — медиа-файлы и ассеты
-  - Метаданные объектов хранятся в PostgreSQL для поиска
-  
-  Redis (Key-Value):
-  - session_cache — кэш активных сессий вызовов
-  - token_cache — кэш токенов доступа
-  - presence_cache — кэш статусов presence
-  - active_chats_cache — кэш активных чатов
-  - rate_limit_cache — счётчики rate limiting
-  
-  Time-Series Database:
-  - metrics_series — системные метрики
-  - call_quality_metrics — метрики качества вызовов
-  
-  Log Storage:
-  - application_logs — логи приложений
-  - audit_logs — логи аудита безопасности
-  
-  Trace Storage:
-  - trace_spans — spans распределённой трассировки
-  
-  Особенности:
-  - Все нереляционные хранилища используются для оптимизации
-    производительности и хранения специализированных данных
-  - Метаданные и индексы могут храниться в PostgreSQL
-    для быстрого поиска и управления доступом
-  - Retention политики определяются требованиями compliance
-    и бизнес-логикой (ADR-010)
+  Нереляционные хранилища UC-платформы (логический уровень):
+
+  1) Object Storage (S3 API):
+      - записи звонков/конференций, вложения чатов, ассеты
+      - контролируемый доступ через pre-signed URL + ABAC/OPA
+      - индексация объектов (object_index) хранится в PostgreSQL, но показана здесь как каталог
+
+  2) Redis:
+      - session_cache/presence_cache/active_chats_cache
+      - rate_limit_cache (API Gateway)
+      - idempotency_keys (обязательно при Kafka at-least-once)
+      - routing_cache (low-latency путь Call Control)
+
+  3) Kafka (выбранный event-bus):
+      - топики по доменам: call/cdr/chat/presence/conf
+      - схема событий через Schema Registry (рекомендовано)
+      - at-least-once => идемпотентность и дедупликация
+
+  4) Observability:
+      - метрики (Prometheus/TSDB), логи (Loki/ELK), трейсы (Tempo/Jaeger)
+
+  5) Политики (ABAC/OPA):
+      - bundles/versions (policy_bundles) + кэш (policy_cache)
+      - аудит решений и выдачи доступа к объектам
+
+  Диаграмма согласована с:
+  - Container: выделены Chat, Voice Conferencing, OPA PDP, Kafka, S3
+  - Deployment: Kafka выбран явно; S3 как AWS S3/MinIO; протоколы зафиксированы
 end note
 
 @enduml

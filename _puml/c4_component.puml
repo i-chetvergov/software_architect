@@ -1,5 +1,6 @@
 @startuml c4_component
 !include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
 skinparam backgroundColor #FFFFFF
 skinparam legendBackgroundColor #EEEBDC
 skinparam legendBorderColor #2D3E50
@@ -12,98 +13,159 @@ left to right direction
 
 title "Call Control Service — Компонентная диаграмма"
 
-' ============ АКТЁРЫ И КОНТЕЙНЕРЫ ============
+' ==========================================================
+' ТЕГИ И СТИЛИ (выровнено с контейнерной диаграммой)
+' ==========================================================
+AddElementTag("Периметр",    $bgColor="#FFEBEE", $borderColor="#C62828")
+AddElementTag("Сигнализация",$bgColor="#E3F2FD", $borderColor="#1976D2")
+AddElementTag("Данные",      $bgColor="#E8EAF6", $borderColor="#3F51B5")
+AddElementTag("Политики",    $bgColor="#FFFDE7", $borderColor="#9E9D24")
 
+' ==========================================================
+' АКТЁРЫ И ВНЕШНИЕ КОНТЕЙНЕРЫ
+' ==========================================================
 Person(corpUser, "Корпоративный пользователь", "Сотрудник, использующий UC-платформу")
 
 System_Ext(ucClients, "UC Clients", "Веб-клиент, мобильные приложения")
-Container(apiGateway, "API Gateway", "HTTPS, REST", "API-шлюз")
-Container(callControlService, "Call Control Service", "HTTP, gRPC, SIP", "Управление вызовами и маршрутизация")
 
-Container_Ext(sipGw, "SIP Gateway / SBC", "SIP", "Session Border Controller")
+Container(apiGateway, "API Gateway", "HTTPS, REST, WebSocket", "API-шлюз/WAF: authN/authZ на периметре", $tags="Периметр")
+Container(callControlService, "Call Control Service", "HTTP, gRPC, SIP", "Управление вызовами и маршрутизация", $tags="Сигнализация")
+
+Container_Ext(sipGw, "SIP Gateway / SBC", "SIP, SIP/TLS", "Session Border Controller")
 Container_Ext(webrtcGw, "WebRTC Gateway", "WebRTC, WebTransport", "WebRTC шлюз")
-Container_Ext(iam, "IAM Service", "OIDC, SAML 2.0", "Сервис аутентификации")
+Container_Ext(iam, "IAM Service", "OIDC, SAML 2.0", "IdP/Authorization Server (SSO, токены)")
+Container_Ext(policyPDP, "Policy Decision Point (OPA)", "HTTP/gRPC", "PDP: ABAC/REGO решения allow/deny + obligations", $tags="Политики")
 Container_Ext(billing, "Billing / CDR Service", "Events", "Сервис биллинга")
 Container_Ext(presence, "Presence Service", "Events", "Сервис presence")
+Container_Ext(voiceConf, "Voice Conferencing Service", "SIP/WebRTC, gRPC, Events", "Сервис голосовых конференций")
 
-SystemDb_Ext(dbCalls, "БД вызовов", "PostgreSQL", "Хранилище вызовов и сессий")
-SystemDb_Ext(cache, "Кэш", "Redis", "Кэширование сессий и маршрутизации")
-SystemDb_Ext(messageQueue, "Очередь сообщений", "Kafka / RabbitMQ", "Брокер сообщений")
+ContainerDb(dbCalls, "БД вызовов", "PostgreSQL", "Хранилище вызовов и сессий", $tags="Данные")
+ContainerDb(cache, "Кэш", "Redis", "Кэширование сессий и маршрутизации", $tags="Данные")
+ContainerQueue(messageQueue, "Очередь сообщений", "Kafka / RabbitMQ", "Брокер сообщений", $tags="Данные")
 
-' ============ КОМПОНЕНТЫ CALL CONTROL SERVICE ============
-
+' ==========================================================
+' КОМПОНЕНТЫ CALL CONTROL SERVICE
+' ==========================================================
 Container_Boundary(callControlBoundary, "Call Control Service") {
-    Component(callOrchestrator, "Call Orchestrator", "Java / Go", "Оркестрация жизненного цикла вызовов")
-    Component(routingEngine, "Routing Engine", "Java / Go", "Маршрутизация вызовов по правилам")
-    Component(sessionManager, "Session Manager", "Java / Go", "Управление активными сессиями вызовов")
-    Component(sipHandler, "SIP Handler", "Java / Go", "Обработка SIP-сообщений")
-    Component(webrtcHandler, "WebRTC Handler", "Java / Go", "Обработка WebRTC-сигнализации")
-    Component(cdrCollector, "CDR Collector", "Java / Go", "Сбор данных для CDR")
-    ComponentDb(callRepository, "Call Repository", "JPA / SQL", "Доступ к данным вызовов")
-    Component(cacheAdapter, "Cache Adapter", "Redis Client", "Доступ к кэшу")
+
+	Component(callApi, "Call Control API", "HTTP/gRPC", "Входная точка: команды управления вызовом (create/hold/transfer/end)")
+
+	Component(authContextValidator, "Auth Context Validator", "Library", "Валидация identity context от API Gateway (claims/scopes/tenant) без вызова IAM на каждый запрос")
+
+	Component(policyClient, "Policy Client", "OPA Client", "Формирование ABAC-запросов в PDP (subject/resource/action/context), разбор obligations")
+
+	Component(callOrchestrator, "Call Orchestrator", "Java / Go", "Оркестрация жизненного цикла вызовов, координация подсистем")
+
+	Component(routingEngine, "Routing Engine", "Java / Go", "Выбор маршрута: правила, префиксы, политики, fallback")
+	Component(routePolicyEvaluator, "Route Policy Evaluator", "Java / Go", "Применение policy obligations к маршруту (например: запрет направления, forced trunk, запись)")
+
+	Component(sessionManager, "Session Manager", "Java / Go", "Управление активными сессиями и их состояниями, идемпотентность")
+	Component(stateMachine, "Call State Machine", "Library", "Детерминированные переходы состояний вызова (FSM)")
+
+	Component(sipHandler, "SIP Handler", "Java / Go", "Обработка SIP-сообщений, транзакции/диалоги")
+	Component(webrtcHandler, "WebRTC Handler", "Java / Go", "Обработка сигнализации WebRTC-сессий (контрольные сообщения)")
+
+	Component(eventPublisher, "Event Publisher", "Kafka/Rabbit Client", "Публикация событий вызова (started/connected/ended/fail) [async]")
+
+	Component(cdrCollector, "CDR Collector", "Java / Go", "Сбор данных для CDR: тайминги, причины завершения, маршрут, участники")
+
+	ComponentDb(callRepository, "Call Repository", "SQL", "Доступ к данным: вызовы/сессии/маршруты/состояния")
+	Component(cacheAdapter, "Cache Adapter", "Redis Client", "Кэш маршрутизации, активные сессии, dedup keys")
 }
 
-' ============ ВЗАИМОДЕЙСТВИЯ ============
+' ==========================================================
+' ВЗАИМОДЕЙСТВИЯ (верхний уровень)
+' ==========================================================
+Rel(corpUser, ucClients, "Использует", "Инициация/управление вызовом")
+Rel(ucClients, apiGateway, "HTTPS/JSON", "REST/Web API")
+Rel(apiGateway, callApi, "HTTP/gRPC + Identity Context", "Команды управления вызовом")
 
-Rel(corpUser, ucClients, "Использует", "Инициация вызова")
-Rel(ucClients, apiGateway, "HTTPS/JSON", "REST запросы")
-Rel(apiGateway, callOrchestrator, "HTTP/gRPC", "Создание/управление вызовом")
+' Валидация контекста доступа (не делаем IAM bottleneck)
+Rel(callApi, authContextValidator, "In-process", "Валидация claims/scopes/tenant")
+Rel(callApi, policyClient, "gRPC", "Запрос ABAC-решения (authorize)")
 
-' Внутренние взаимодействия
+' PDP как формальная точка принятия решения
+Rel(policyClient, policyPDP, "HTTP/gRPC", "authorize(subject, resource, action, context)")
+
+' Оркестрация и маршрутизация
+Rel(callApi, callOrchestrator, "gRPC", "Создание/управление вызовом")
 Rel(callOrchestrator, routingEngine, "gRPC", "Запрос маршрутизации")
+Rel(routingEngine, routePolicyEvaluator, "In-process", "Применение obligations к маршруту")
+
+' Сессии и состояния
 Rel(callOrchestrator, sessionManager, "gRPC", "Создание/обновление сессии")
-Rel(routingEngine, callRepository, "Repository", "Чтение правил маршрутизации")
-Rel(routingEngine, cacheAdapter, "Redis", "Кэш маршрутизации")
+Rel(sessionManager, stateMachine, "In-process", "Переходы состояний вызова")
+
+' SIP / WebRTC обработчики
+Rel(callOrchestrator, sipHandler, "gRPC", "Команды сигнализации (INVITE/UPDATE/BYE/...)")
+Rel(sipHandler, sipGw, "SIP/SIP-TLS", "SIP-сообщения")
+Rel(sipGw, sipHandler, "SIP/SIP-TLS", "SIP-ответы")
+
+Rel(callOrchestrator, webrtcHandler, "gRPC", "Команды сигнализации WebRTC")
+Rel(webrtcHandler, webrtcGw, "WebTransport/WebRTC", "Сигнализация WebRTC")
+Rel(webrtcGw, webrtcHandler, "WebTransport/WebRTC", "Ответы/события WebRTC")
+
+' Интеграция с голосовыми конференциями (как отдельный домен)
+Rel(callOrchestrator, voiceConf, "gRPC/Events", "Создание/управление конференцией (room/participants)")
+
+' Presence учитывается маршрутизацией и/или событиями
+Rel(routingEngine, presence, "Events/Query", "Доступность/статус абонента (optional)")
+Rel(eventPublisher, presence, "Events", "События состояния вызова [async]")
+
+' CDR/Events
+Rel(cdrCollector, billing, "Events", "CDR события [async]")
+Rel(callOrchestrator, eventPublisher, "Events", "Публикация событий вызова [async]")
+Rel(eventPublisher, messageQueue, "Events", "Call events [async]")
+Rel(cdrCollector, messageQueue, "Events", "CDR events [async]")
+
+' Данные
+Rel(callRepository, dbCalls, "SQL", "Вызовы/сессии/маршруты")
+Rel(cacheAdapter, cache, "Redis", "Кэш сессий/маршрутов/dedup")
 Rel(sessionManager, callRepository, "Repository", "Сохранение состояния сессии")
 Rel(sessionManager, cacheAdapter, "Redis", "Кэш активных сессий")
-
-Rel(callOrchestrator, sipHandler, "gRPC", "Обработка SIP-запросов")
-Rel(sipHandler, sipGw, "SIP", "SIP-сообщения")
-Rel(sipGw, sipHandler, "SIP", "SIP-ответы")
-
-Rel(callOrchestrator, webrtcHandler, "gRPC", "Обработка WebRTC-сигнализации")
-Rel(webrtcHandler, webrtcGw, "WebRTC", "WebRTC-сигнализация")
-Rel(webrtcGw, webrtcHandler, "WebRTC", "WebRTC-ответы")
-
-Rel(callOrchestrator, iam, "gRPC", "Валидация токенов")
-Rel(cdrCollector, billing, "Events", "CDR события [async]")
-Rel(cdrCollector, presence, "Events", "События изменения состояния [async]")
-
+Rel(routingEngine, callRepository, "Repository", "Чтение правил маршрутизации")
+Rel(routingEngine, cacheAdapter, "Redis", "Кэш маршрутизации")
 Rel(cdrCollector, callRepository, "Repository", "Запись CDR данных")
-Rel(callRepository, dbCalls, "SQL", "Вызовы, сессии, маршрутизация")
-Rel(cacheAdapter, cache, "Redis", "Кэш сессий, токенов, маршрутизации")
-Rel(cdrCollector, messageQueue, "Events", "CDR события [async]")
 
-' ============ ПРИМЕЧАНИЯ ============
+' IAM присутствует как источник токенов/SSO, но не обязательный runtime-hop
+Rel(iam, apiGateway, "OIDC/JWKS", "Ключи/токены (JWT)")
 
-note right of callOrchestrator
-    Call Orchestrator — основной компонент:
-    - Управляет жизненным циклом вызова
-    - Координирует взаимодействие компонентов
-    - Применяет бизнес-логику вызовов
+' ==========================================================
+' ПРИМЕЧАНИЯ
+' ==========================================================
+note right of callApi
+	Call Control API:
+	- точка входа команд (create/answer/hold/transfer/end)
+	- получает identity context от API Gateway
+	- инициирует ABAC проверку через PDP (OPA)
+end note
+
+note bottom of policyPDP
+	PDP (OPA/REGO):
+	- allow/deny
+	- obligations (например: require_recording, force_trunk, block_prefix)
+	- versioning/rollback политик выполняется на уровне платформы
 end note
 
 note bottom of routingEngine
-    Routing Engine:
-    - Применяет правила маршрутизации
-    - Определяет маршрут для входящих/исходящих вызовов
-    - Учитывает presence и доступность пользователей
+	Routing Engine:
+	- правила/префиксы/пулы маршрутов
+	- учёт статуса (presence) при необходимости
+	- применение obligations через Route Policy Evaluator
 end note
 
 note bottom of sessionManager
-    Session Manager:
-    - Управляет активными сессиями
-    - Отслеживает состояние вызовов
-    - Обеспечивает идемпотентность операций
+	Session Manager + FSM:
+	- согласованные переходы состояний (idempotent)
+	- восстановление после ретраев/дубликатов событий
+	- хранение состояния в DB + Redis (hot path)
 end note
 
 note right of cdrCollector
-    CDR Collector:
-    - Асинхронно собирает данные вызовов
-    - Формирует CDR записи
-    - Отправляет события в биллинг и presence
+	CDR Collector:
+	- собирает тайминги/причины завершения/маршрут
+	- публикует CDR events (billing) асинхронно
 end note
 
 SHOW_LEGEND()
-
 @enduml
